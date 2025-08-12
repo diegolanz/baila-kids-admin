@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Student {
+  id            String         @id @default(uuid())
+  studentName   String
+  age           Int
+  parentName    String
+  phone         String
+  email         String
+  location      SchoolLocation
+  frequency     ClassFrequency
+  selectedDays  String[]
+  startDate     DateTime
+  paymentStatus PaymentStatus  @default(PENDING)
+
+  // NEW FIELDS (names kept exactly as you’re sending)
+  paymentMethod     String?
+  liabilityAccepted Boolean @default(false)
+  waiverName        String?
+  waiverAddress     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum SchoolLocation {
+  KATY
+  SUGARLAND
+}
+
+enum ClassFrequency {
+  ONCE_A_WEEK
+  TWICE_A_WEEK
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}

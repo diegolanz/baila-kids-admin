@@ -1,0 +1,623 @@
+/* ==========================================================================
+   Baila Kids – Registration Styles
+   Cleaned & Consolidated
+   ========================================================================== */
+
+/* === CSS Variables (theme) ============================================ */
+:root {
+  --bg: #f8f1dd;
+  --brand: #ff4d91;
+  --brand-2: #ff66a3;
+  --brand-dark: #922957;
+  --brand-darker: #631d38;
+  --text: #3e2c1d;
+  --text-strong: #333;
+  --card: #ffffffdd;
+  --muted: #ddd;
+  --note: #f9f9f9;
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.10);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ===Base / Reset ===================================================== */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: "Segoe UI", sans-serif;
+  background-color: var(--bg);
+  overflow-x: hidden;
+  position: relative;
+  z-index: 0;
+  text-align: center; /* Default: center all text */
+  color: var(--text);
+}
+
+/* Background image overlay */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: url("/music-back.jpg") center / cover no-repeat;
+  opacity: 0.2;
+  filter: brightness(1) contrast(1);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Utility container (if used) */
+.container {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* === Typography ======================================================= */
+h1,
+h2,
+h3,
+label,
+legend,
+.total {
+  color: var(--text);
+}
+
+.reg-title {
+  margin-top:-4rem;
+  margin-bottom: 1rem;
+  font-size: 2rem;
+  font-weight: bold;
+  color: #ff4d91;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+}
+
+.title-moreinfo {
+font-size:1rem;
+color: rgb(41, 41, 12);
+font-weight: bold;
+margin-bottom:1rem;
+}
+
+.questions {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.price-info {
+  color: rgb(41, 41, 12);
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+
+.student-reg-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #ac3764;
+  margin: 1.5rem 0;
+}
+
+/* === Animations ======================================================= */
+.fade-in { animation: fadeIn 0.6s ease-in-out both; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(15px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Floating doodles animation (optional) */
+@keyframes float {
+  0%   { transform: translateY(0); }
+  50%  { transform: translateY(10px); }
+  100% { transform: translateY(0); }
+}
+
+/* === Decorative Doodles (optional) ==================================== */
+.background-doodles {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.doodle {
+  position: absolute;
+  opacity: 1;
+  animation: float 12s ease-in-out infinite;
+}
+
+.doodle.star    { top: 5%;  left: 3%;  width: 60px; }
+.doodle.face    { bottom: 10%; right: 5%; width: 40px; }
+.doodle.music1  { top: 15%; right: 10%; width: 50px; }
+.doodle.music2  { bottom: 15%; left: 10%; width: 45px; }
+
+/* === Steps / Sections ================================================= */
+.registration-wrapper { padding: 0 16px; }
+
+.step {
+  margin: 60px 0;
+  scroll-margin-top: 20vh;
+}
+
+/* === Buttons ========================================================== */
+button {
+  background-color: var(--brand-2);
+  color: #fff;
+  font-weight: 700;
+  border: 0;
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  margin: 1rem;
+  margin-bottom:0;
+  cursor: pointer;
+  transition: background-color 0.3s, border-color 0.3s;
+}
+
+button:hover:enabled { background-color: var(--brand); }
+button:disabled      { background-color: var(--muted); cursor: not-allowed; }
+
+/* Grouped choice buttons */
+.button-group {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 1.5rem;
+}
+
+.button-group button {
+  background-color: #ff4d91;
+  border: 2px solid #ccc;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 600;
+  transition: background-color 0.3s, border-color 0.3s;
+  width: auto; 
+  min-width: 180px; 
+  text-align: center;
+}
+
+.button-group button.active {
+  background-color: var(--brand-dark);
+  color: #fff;
+  border-color: var(--brand-darker);
+  border-style: double;
+}
+
+/* Day option helpers */
+.day-option { display: inline-flex; align-items: center; gap: 6px; }
+.info-btn { margin-left: 0; padding: 1px 6px; }
+.note { color: #000; }
+
+/* === Forms ============================================================ */
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  background-color: var(--card);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-md);
+  max-width: 25rem;
+  margin: 0 auto;
+}
+
+/* Intentionally left-align form labels for readability */
+form label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.3rem;
+  text-align: left;          /* override global center */
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+form input[type="text"],
+form input[type="number"],
+form input[type="email"] {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  background-color: #fff;
+  color: var(--text-strong);
+}
+
+input::placeholder { color: #000 !important; }
+
+/* Fieldset / Legend */
+fieldset {
+  border: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+legend {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+}
+
+/* Radios / Checkboxes */
+.radio-option,
+form label.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: flex-start;
+  text-align: left;          /* preserve left alignment inside radio rows */
+}
+
+.radio-option input[type="radio"] { transform: scale(1.2); margin: 0; }
+input[type="radio"],
+input[type="checkbox"] { accent-color: #f26b7d; }
+
+/* Totals / Errors */
+.total {
+  font-weight: 700;
+  font-size: 1.2rem;
+  margin-top: 0.5rem;
+  color: #444;
+}
+
+.error {
+  color: #b00020;
+  font-weight: 500;
+  font-size: 0.9rem;
+  margin-top: -0.5rem;
+  text-align: left;          /* errors align with fields */
+}
+
+/* === Liability Section =============================================== */
+.liability-section {
+  margin-top: 2rem;
+  padding: 1rem;
+  background: var(--note);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.liability-title { font-weight: 700; margin-bottom: 0.5rem; }
+.liability-text p { margin-bottom: 1rem; color: #000; }
+
+.liability-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.liability-checkbox input { margin: 0; }
+
+/* === Summary Box ===================================================== */
+.summary-box {
+  background-color: var(--note);
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 15px;
+  margin-top: 20px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.summary-title { font-weight: 700; margin-bottom: 10px; color: #333; }
+
+/* Summary list is easier to read left-aligned */
+.summary-box ul {
+  list-style: none;
+  padding: 0 0 0 1.2rem;
+  margin: 0;
+  text-align: left;          /* override global center */
+}
+
+.summary-box li { margin-bottom: 6px; color: #000; }
+
+.final-total { color: green; font-size: 1.3rem; }
+
+/* === 11) Confirmation ==================================================== */
+.confirmation h2 { margin-bottom: 0.5rem; }
+
+/* === 12) Responsive ====================================================== */
+@media (max-width: 768px) {
+  .container { padding: 1.5rem 1rem; }
+  .doodle { width: 30px !important; }
+}
+
+@media (max-width: 600px) {
+  .button-group { flex-direction: column; align-items: center; }
+  .button-group button { max-width: 100%; }
+  .summary-box { font-size: 1rem; }
+  .registration-wrapper { padding: 10px; }
+}
+
+@media (max-width: 480px) {
+  form { padding: 1rem; border-radius: 0.75rem; }
+  input, label, legend, .total, button { font-size: 0.95rem; }
+  button[type="submit"] { font-size: 1rem; }
+  .liability { font-size: 0.8rem; }
+}
+
+/* === Floating Doodles Background === */
+.background-doodles {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.doodle {
+  position: absolute;
+  opacity: 0.25;
+  animation: float 10s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(8px); }
+}
+
+/* Individual doodles positioned throughout the screen */
+.doodle.star { top: 5%; left: 3%; width: 60px; }
+.doodle.smile { top: 10%; right: 10%; width: 40px; }
+.doodle.music1 { top: 20%; left: 15%; width: 50px; }
+.doodle.music2 { bottom: 10%; right: 5%; width: 45px; }
+.doodle.squiggle1 { bottom: 5%; left: 10%; width: 50px; }
+.doodle.heart { top: 40%; right: 20%; width: 30px; }
+.doodle.crown { bottom: 20%; left: 25%; width: 35px; }
+
+.logo-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  max-width: 100%;
+  padding: 0 1rem;
+  margin-top:1rem; /* remove space below */
+}
+
+.logo {
+  max-width: 300px;
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: contain;
+  animation: fadeIn 1s ease-in-out;
+  margin-bottom: 1.5rem; /* remove image bottom margin if any */
+}
+
+
+.confirmation {
+  text-align: center;
+  padding: 4rem 2rem;
+  background-color: #ffffffdd;
+  border-radius: 1rem;
+  max-width: 500px;
+  margin: 3rem auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  animation: fadeIn 1s ease-in-out;
+}
+
+.confirmation-title {
+  font-size: 2rem;
+  color: #ac3764;
+  margin-bottom: 1rem;
+  font-weight: bold;
+}
+
+.confirmation-text {
+  font-size: 1.1rem;
+  color: #444;
+  line-height: 1.6;
+}
+
+.reset-button {
+  margin-top: 2rem;
+  padding: 0.75rem 1.5rem;
+  background-color: #ff66a3;
+  color: white;
+  font-weight: bold;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.3s ease;
+}
+
+.reset-button:hover {
+  background-color: #e0558f;
+}
+
+.highlight-date {
+  background: #ffe3ec !important;
+  color: #b3124d !important;
+  font-weight: bold;
+  border-radius: 50%;
+}
+
+.react-calendar {
+  border: none;
+  width: 100%;
+  max-width: 500px;
+  background: #fff;
+  font-family: 'Segoe UI', sans-serif;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  padding: 1rem;
+}
+
+.react-calendar__tile--now {
+  background: #f9f9f9;
+}
+
+.highlight-start {
+  background: #ffe3ec !important;
+  color: #b3124d !important;
+  border-radius: 50%;
+  font-weight: bold;
+}
+
+.highlight-event {
+  background: #d0f0c0 !important;
+  color: #1a4d2e !important;
+  border-radius: 50%;
+  font-weight: bold;
+}
+
+/* Base calendar tile */
+.react-calendar__tile {
+  font-weight: normal;
+  color: #333;
+}
+
+/* Class start date highlight (e.g. yellow) */
+.highlight-start {
+  background-color: #ffef99 !important;
+  color: #333 !important;
+  font-weight: bold;
+  border-radius: 50%;
+  padding: 0.35rem;
+}
+
+/* Custom event highlight (e.g. green) */
+.highlight-event {
+  background-color: #b2f2bb !important;
+  color: #1a3c2e !important;
+  font-weight: bold;
+  border-radius: 50%;
+  padding: 0.35rem;
+}
+
+/* Fix for selected day */
+.react-calendar__tile--active {
+  background-color: #00b4d8 !important;
+  color: white !important;
+  border-radius: 50%;
+  font-weight: bold;
+}
+
+/* Optional: adjust weekend colors */
+.react-calendar__month-view__weekdays__weekday abbr {
+  color: #333 !important;
+}
+
+.day-option-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.info-circle {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  background-color: #ff4d91;
+  color: white;
+  border-radius: 100%;
+  font-size: 0.75rem;
+  max-width:10%;  
+  height: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  z-index: 2;
+  padding: 0;
+}
+
+.day-note {
+  display: block;
+  font-size: 0.75rem;
+  margin-top: 4px;
+  color: #ffeef7; /* Slightly lighter pink-white */
+  font-weight: normal;
+}
+
+
+/* Match dropdown to other form inputs */
+select.form-input {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #333;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  box-sizing: border-box;
+  margin-bottom: 15px;
+  cursor: pointer;
+}
+
+/* Optional: custom arrow for dropdown */
+select.form-input {
+  background-image: url("data:image/svg+xml;utf8,<svg fill='gray' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+}
+
+select.form-input:focus {
+  outline: none;
+  border-color: #ff4d91;
+  box-shadow: 0 0 0 2px rgba(255, 77, 145, 0.2);
+}
+
+
+.selected-days-display {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #ffffff;
+  background: #852a4d;
+  padding: 6px 10px;
+  border-radius: 6px;
+  display: inline-block;
+  border: 1px solid #ddd;
+  border-color: #ff0062;
+  border-width: 5px;
+}
+
+.button-group button.active + .selected-days-display {
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.price-text, .days-text {
+  display: block;
+}
+
+.days-text {
+  font-size: 14px;
+  color: #ffffff;
+}
+
+
+
+
+
+
