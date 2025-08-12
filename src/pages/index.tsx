@@ -339,7 +339,7 @@ const AdminPage: React.FC = () => {
   }, []);
 
   const dayOnly = (day: string) =>
-    students.filter(s => Array.isArray(s.selectedDays) && s.selectedDays.length === 1 && s.selectedDays[0] === day);
+    students.filter(s => Array.isArray(s.selectedDays) && s.selectedDays.includes(day));
 
   const handleStatusUpdate = async (id: string, newStatus: Student['paymentStatus']) => {
     try {
