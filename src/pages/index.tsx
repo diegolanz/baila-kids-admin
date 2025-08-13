@@ -32,6 +32,22 @@ function formatDatePretty(iso: string) {
   });
 }
 
+const prices = {
+  KATY: { Monday: 0, Tuesday: 245, Wednesday: 245, Thursday: 0, both: 450 },
+  SUGARLAND: { Monday: 230, Tuesday: 0, Wednesday: 0, Thursday: 245, both: 450 },
+} as const;
+
+const calculateOwed = (s: Student) => {
+  if (s.paymentStatus === 'PAID') return 0;
+  if (s.frequency === 'ONCE_A_WEEK') {
+    const day = s.selectedDays[0] as keyof typeof prices['KATY'];
+    return prices[s.location][day] || 0;
+  }
+  return prices[s.location].both;
+};
+
+
+
 const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title, students }) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(0);
@@ -188,14 +204,27 @@ const PaymentTable: React.FC<{ students: Student[]; onStatusUpdate: (id: string,
   const [search, setSearch] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
   const [statusUpdates, setStatusUpdates] = useState<Record<string, Student['paymentStatus']>>({});
+  const [showUnpaidFirst, setShowUnpaidFirst] = useState(false);
+
 
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
-    return students.filter(s =>
-      s.studentName.toLowerCase().includes(term) ||
-      s.parentName.toLowerCase().includes(term)
-    );
-  }, [students, search]);
+      let result = students.filter(s =>
+        s.studentName.toLowerCase().includes(term) ||
+        s.parentName.toLowerCase().includes(term)
+      );
+
+      if (showUnpaidFirst) {
+        result = [...result].sort((a, b) => {
+          const aOwes = calculateOwed(a) > 0 ? 0 : 1;
+          const bOwes = calculateOwed(b) > 0 ? 0 : 1;
+          return aOwes-bOwes; // unpaid first
+        });
+      }
+
+      return result;
+  }, [students, search, showUnpaidFirst]);
+
 
   const handleChange = (id: string, value: Student['paymentStatus']) => {
     setStatusUpdates(prev => ({ ...prev, [id]: value }));
@@ -217,8 +246,16 @@ const PaymentTable: React.FC<{ students: Student[]; onStatusUpdate: (id: string,
           placeholder="Search by student or parent..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #000000ff', minWidth: '100%' }}
+          style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #000000ff', minWidth: '50%' }}
         />
+        <button
+          className="toggle-btn"
+          style={{ marginLeft: '0.5rem', whiteSpace: 'nowrap', maxWidth: '40%', fontSize: '0.7rem', padding: '0.5rem' }}
+          onClick={() => setShowUnpaidFirst(prev => !prev)}
+        >
+          {showUnpaidFirst ? 'Show Default Order' : 'Show Unpaid First'}
+        </button>
+
       </div>
 
       {/* Desktop */}
@@ -228,6 +265,7 @@ const PaymentTable: React.FC<{ students: Student[]; onStatusUpdate: (id: string,
             <tr>
               <th>Student</th>
               <th>Parent</th>
+              <th>Owes</th>
               <th>Current Status</th>
               <th>Update</th>
               <th></th>
@@ -238,6 +276,7 @@ const PaymentTable: React.FC<{ students: Student[]; onStatusUpdate: (id: string,
               <tr key={s.id}>
                 <td>{s.studentName}</td>
                 <td>{s.parentName}</td>
+                <td>${calculateOwed(s)}</td>
                 <td>
                   <span className={`pill pill--${s.paymentStatus.toLowerCase()}`}>{s.paymentStatus}</span>
                 </td>
@@ -284,6 +323,9 @@ const PaymentTable: React.FC<{ students: Student[]; onStatusUpdate: (id: string,
           <div key={s.id} className="mobile-card expanded" style={{ marginBottom: '1rem', padding: '1rem' }}>
             <p><strong>Student:</strong> {s.studentName}</p>
             <p><strong>Parent:</strong> {s.parentName}</p>
+            <p style={{ color: calculateOwed(s) === 0 ? 'green' : 'red' }}>
+              <strong>Owes:</strong> ${calculateOwed(s)}
+            </p>
             <p><strong>Current Status:</strong> <span className={`pill pill--${s.paymentStatus.toLowerCase()}`}>{s.paymentStatus}</span></p>
             <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
               <select
