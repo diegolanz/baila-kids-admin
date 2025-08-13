@@ -46,6 +46,14 @@ const calculateOwed = (s: Student) => {
   return prices[s.location].both;
 };
 
+const tuitionFor = (s: Student) => {
+  if (s.frequency === 'ONCE_A_WEEK') {
+    const day = (s.selectedDays?.[0] ?? '') as keyof typeof prices['KATY'];
+    return prices[s.location][day] ?? 0;
+  }
+  return prices[s.location].both;
+};
+
 
 
 const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title, students }) => {
@@ -90,8 +98,8 @@ const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title
       {tableOpen && (
         <>
           {/* Desktop */}
-          <div className="table-scroll desktop-only">
-            <table className="admin-table">
+          <div className="table-scroll desktop-only" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+            <table className="admin-table" style={{ width: '100%' }}>
               <thead>
                 <tr>
                   <th>Student</th>
@@ -147,7 +155,7 @@ const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title
           </div>
 
           {/* Mobile */}
-          <div className="mobile-only">
+          <div className="mobile-only" style={{ maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
             {paginated.map(s => {
               const expanded = expandedRows.has(s.id);
               return (
@@ -318,7 +326,7 @@ const PaymentTable: React.FC<{ students: Student[]; onStatusUpdate: (id: string,
       </div>
 
       {/* Mobile */}
-      <div className="mobile-only">
+      <div className="mobile-only" style={{ maxHeight: '400px', overflowY: 'auto' }}>
         {filtered.map(s => (
           <div key={s.id} className="mobile-card expanded" style={{ marginBottom: '1rem', padding: '1rem' }}>
             <p><strong>Student:</strong> {s.studentName}</p>
@@ -364,6 +372,10 @@ const AdminPage: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
+  const [globalSearch, setGlobalSearch] = useState('');
+  const [foundStudents, setFoundStudents] = useState<Student[]>([]);
+  const [expandedStudentIds, setExpandedStudentIds] = useState<Set<string>>(new Set());
+
 
   useEffect(() => {
     (async () => {
@@ -392,12 +404,163 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const earnings = React.useMemo(() => {
+    let paidCount = 0;
+    let unpaidCount = 0;   // PENDING
+    let failedCount = 0;   // FAILED
+
+    let earned = 0;        // sum of tuition for PAID
+    let outstanding = 0;   // sum of tuition for NOT PAID
+
+    for (const s of students) {
+      const amt = tuitionFor(s);
+      if (s.paymentStatus === 'PAID') {
+        paidCount += 1;
+        earned += amt;
+      } else if (s.paymentStatus === 'PENDING') {
+        unpaidCount += 1;
+        outstanding += amt;
+      } else if (s.paymentStatus === 'FAILED') {
+        failedCount += 1;
+        outstanding += amt;
+      }
+    }
+
+    const totalCount = paidCount + unpaidCount + failedCount;
+    const paidPct = totalCount ? (paidCount / totalCount) * 100 : 0;
+    const unpaidPct = 100 - paidPct; // treat FAILED as unpaid for the pie
+
+    return {
+      paidCount, unpaidCount, failedCount,
+      earned, outstanding,
+      paidPct, unpaidPct, totalCount
+    };
+  }, [students]);
+
+
+
+
   return (
     <div className="admin-container">
       <header className="admin-header">
         <h1>Baila Kids Admin Dashboard</h1>
-        <p className="sub">Welcome Cristina! hola mami :)</p>
+        <p className="sub" style={{color: 'black'}}>Welcome Cristina! hola mami :)</p>
       </header>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', alignItems: 'center', maxWidth: '50%', borderRadius: '5px' }}>
+        <input
+          type="text"
+          placeholder="Search any student..."
+          value={globalSearch}
+          onChange={(e) => {
+            const term = e.target.value;
+            setGlobalSearch(term);
+
+            if (term.trim().length === 0) {
+              setFoundStudents([]);
+              return;
+            }
+
+            const matches = students.filter(s =>
+              s.studentName.toLowerCase().includes(term.toLowerCase()) ||
+              s.parentName.toLowerCase().includes(term.toLowerCase()) ||
+              s.email.toLowerCase().includes(term.toLowerCase())
+            );
+            setFoundStudents(matches);
+          }}
+
+          style={{
+            padding: '0.5rem',
+            borderRadius: '6px',
+            border: '1px solid #ccc',
+            flex: 1
+          }}
+        />
+        {globalSearch && (
+          <button
+            className="toggle-btn"
+            style={{ whiteSpace: 'nowrap' }}
+            onClick={() => {
+              setGlobalSearch('');
+              setFoundStudents([]);
+            }}
+          >
+            Clear
+          </button>
+        )}
+
+      </div>
+      {foundStudents.length > 0 && (
+        <div
+          style={{
+            maxHeight: '250px',
+            overflowY: 'auto',
+            border: '1px solid #ccc',
+            borderRadius: '8px',
+            padding: '0.5rem',
+            background: '#fff',
+            marginBottom: '1rem' ,
+            maxWidth: '70%'
+          }}
+        >
+          {foundStudents.map(s => {
+            const expanded = expandedStudentIds.has(s.id);
+            return (
+              <div
+                key={s.id}
+                style={{
+                  borderBottom: '1px solid #eee',
+                  padding: '0.5rem 0',
+                  cursor: 'pointer' ,
+                }}
+                onClick={() => {
+                  setExpandedStudentIds(prev => {
+                    const newSet = new Set(prev);
+                    newSet.has(s.id) ? newSet.delete(s.id) : newSet.add(s.id);
+                    return newSet;
+                  });
+                }}
+              >
+                {/* Collapsed header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span><strong>{s.studentName}</strong> — {s.parentName}</span>
+                  <span style={{ fontSize: '1.2rem' }}>{expanded ? '▲' : '▼'}</span>
+                </div>
+
+                {/* Expanded details */}
+                {expanded && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
+                    <p><strong>Age:</strong> {s.age}</p>
+                    <p><strong>Phone:</strong> {s.phone}</p>
+                    <p>
+                      <strong>Email:</strong> {s.email}
+                      <button
+                        className="toggle-btn"
+                        style={{ marginLeft: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.85rem' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.location.href = `mailto:${s.email}`;
+                        }}
+                      >
+                        Email
+                      </button>
+                    </p>
+                    <p><strong>Location:</strong> {s.location}</p>
+                    <p><strong>Frequency:</strong> {s.frequency === 'ONCE_A_WEEK' ? 'Once' : 'Twice'}</p>
+                    <p><strong>Day(s):</strong> {s.selectedDays.join(', ')}</p>
+                    <p><strong>Start Date:</strong> {formatDatePretty(s.startDate)}</p>
+                    <p style={{ color: calculateOwed(s) === 0 ? 'green' : 'red' }}>
+                      <strong>Owes:</strong> ${calculateOwed(s)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+
+
 
       {loading && <div className="loader">Loading…</div>}
       {err && !loading && <div className="error">{err}</div>}
@@ -416,6 +579,58 @@ const AdminPage: React.FC = () => {
             <StudentsTable title="Thursday" students={dayOnly('Thursday')} />
           </div>
           <PaymentTable students={students} onStatusUpdate={handleStatusUpdate} />
+          {/* Earnings Section */}
+            {/* Earnings Section */}
+          <section className="admin-section fade-in earnings-section" style={{ marginTop: '2rem' }}>
+            <div className="earnings-header">
+              <h2 style={{ margin: 0, fontWeight: 'bold' }}>Earnings</h2>
+            </div>
+
+            <div className="earnings-grid">
+              {/* Pie: Paid vs Unpaid */}
+              <div className="earnings-pie-wrap">
+                <div
+                  className="earnings-pie"
+                  aria-label="Paid vs Unpaid pie"
+                  title={`Paid ${earnings.paidPct.toFixed(0)}% / Unpaid ${earnings.unpaidPct.toFixed(0)}%`}
+                  style={{ background: `conic-gradient(#2ecc71 0 ${earnings.paidPct}%, #ff6b6b ${earnings.paidPct}% 100%)` }}
+                />
+                <div className="earnings-legend">
+                  <span><span className="legend-swatch" style={{ background: '#ff6b6b' }} /> Unpaid</span>
+                  <span><span className="legend-swatch" style={{ background: '#2ecc71' }} /> Paid</span>
+                </div>
+              </div>
+
+              {/* Numbers */}
+              <div className="earnings-panel">
+                <div className="earnings-counts">
+                  <div className="stat stat--paid">
+                    <div className="stat-label">Paid</div>
+                    <div className="stat-value">{earnings.paidCount}</div>
+                  </div>
+                  <div className="stat stat--unpaid">
+                    <div className="stat-label">Unpaid</div>
+                    <div className="stat-value">{earnings.unpaidCount}</div>
+                  </div>
+                </div>
+
+                <div className="earnings-money-grid">
+                  <div className="money-card">
+                    <div className="money-label">Earnings</div>
+                    <div className="money-value">${earnings.earned.toLocaleString()}</div>
+                    <div className="money-sub">Sum of PAID registrations</div>
+                  </div>
+                  <div className="money-card">
+                    <div className="money-label">Outstanding</div>
+                    <div className="money-value">${earnings.outstanding.toLocaleString()}</div>
+                    <div className="money-sub">Pending + Failed</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+
         </>
       )}
     </div>

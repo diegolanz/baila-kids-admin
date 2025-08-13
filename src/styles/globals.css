@@ -473,3 +473,136 @@ body {
   align-items: center;
   gap: 0.5rem;
 }
+
+
+.admin-table thead th {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 2;
+}
+
+/* Make mobile scrollbars more visible */
+.mobile-scroll {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: #ff4d91 #ffe6f0;
+
+  /* Legacy Edge/IE */
+  -ms-overflow-style: auto;
+
+  /* iOS smooth scrolling */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Chrome/Edge/Safari/Opera */
+.mobile-scroll::-webkit-scrollbar {
+  width: 10px;              /* thicker */
+}
+
+.mobile-scroll::-webkit-scrollbar-track {
+  background: #ffe6f0;      /* light pink track */
+  border-radius: 8px;
+}
+
+.mobile-scroll::-webkit-scrollbar-thumb {
+  background: #ff4d91;      /* bright pill */
+  border-radius: 8px;
+  border: 2px solid #ffe6f0;/* adds contrast ring */
+}
+
+.mobile-scroll::-webkit-scrollbar-thumb:hover {
+  background: #e63d7d;
+}
+
+/* Safety net: prevent horizontal overflow anywhere in the admin page */
+.admin-container,
+.admin-section,
+.earnings-section {
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+/* Layout */
+.earnings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 180px) minmax(0, 1fr); /* both sides can shrink */
+  gap: 1rem;
+  align-items: start;
+}
+
+/* Pie */
+.earnings-pie-wrap { display: flex; flex-direction: column; align-items: center; }
+.earnings-pie {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  flex-shrink: 0;
+}
+.earnings-legend { display: flex; gap: 1rem; font-size: 0.9rem; margin-top: 0.5rem; }
+.legend-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+
+/* Right panel */
+.earnings-panel {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  padding: 1rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0; /* key: lets children shrink inside grid */
+  box-sizing: border-box;
+}
+
+/* Small stat boxes */
+.earnings-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.stat { 
+  background: #f9f9f9; 
+  border: 1px solid #eee; 
+  border-radius: 8px; 
+  padding: 0.75rem; 
+  text-align: center; 
+  min-width: 0; /* key: prevents overflow */
+}
+.stat--paid { background: #f6fffa; border-color: #e8f9ef; }
+.stat--unpaid { background: #fff6f6; border-color: #ffe1e1; }
+.stat--failed { background: #fffaf2; border-color: #ffeed6; }
+.stat-label { font-size: 12px; color: #666; }
+.stat-value { font-weight: 700; font-size: 20px; }
+
+/* Money cards */
+.earnings-money-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.money-card {
+  background: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 0.9rem;
+  min-width: 0; /* key */
+}
+.money-label { font-size: 12px; color: #666; }
+.money-value { font-weight: 800; font-size: 22px; color: #222; }
+.money-sub { font-size: 12px; color: #888; margin-top: 4px; }
+
+/* Mobile-first tweaks */
+@media (max-width: 640px) {
+  .earnings-grid { grid-template-columns: 1fr; }          /* stack pie over panel */
+  .earnings-pie { width: 120px; height: 120px; }          /* smaller pie */
+  .earnings-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .earnings-money-grid { grid-template-columns: 1fr; }     /* stack Earnings / Outstanding */
+}
+@media (min-width: 768px) {
+  .earnings-grid { grid-template-columns: minmax(0, 220px) minmax(0, 1fr); }
+  .earnings-pie { width: 180px; height: 180px; }
+}
