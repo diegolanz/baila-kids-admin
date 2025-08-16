@@ -56,6 +56,10 @@ const tuitionFor = (s: Student) => {
 
 
 
+
+
+
+
 const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title, students }) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(0);
@@ -376,6 +380,13 @@ const AdminPage: React.FC = () => {
   const [foundStudents, setFoundStudents] = useState<Student[]>([]);
   const [expandedStudentIds, setExpandedStudentIds] = useState<Set<string>>(new Set());
 
+  const totalRegistrations = React.useMemo(() => {
+  return students.reduce((sum, s) => {
+    const daysCount = Array.isArray(s.selectedDays) ? s.selectedDays.length : 0;
+    return sum + daysCount;
+  }, 0);
+}, [students]);
+
 
   useEffect(() => {
     (async () => {
@@ -487,6 +498,26 @@ const AdminPage: React.FC = () => {
             Clear
           </button>
         )}
+
+        <div
+  className="total-registrations-card"
+  style={{
+    margin: '0.5rem 0 1rem',
+    padding: '0.75rem 1rem',
+    background: '#fff',
+    border: '1px solid #e5e7eb',
+    borderRadius: '10px',
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '0.75rem',
+    width: 'fit-content',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+  }}
+>
+  <span style={{ fontSize: '0.9rem', color: '#6b7280' }}>Total registrations</span>
+  <span style={{ fontSize: '1.75rem', fontWeight: 800, lineHeight: 1 }}>{totalRegistrations}</span>
+</div>
+
 
       </div>
       {foundStudents.length > 0 && (
