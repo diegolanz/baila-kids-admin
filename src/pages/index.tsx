@@ -88,7 +88,7 @@ const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title
           {students.length > 0 && (
             <button className="toggle-btn" onClick={() => {
               const emails = students.map(s => s.email).join(',');
-              window.location.href = `mailto:${emails}`;
+              window.location.href = `mailto:?bcc=${emails}`;
             }}>
               Email all
             </button>
