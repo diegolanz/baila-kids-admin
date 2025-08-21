@@ -32,6 +32,22 @@ function formatDatePretty(iso: string) {
   });
 }
 
+type DayKey = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday';
+
+interface WaitlistEntry {
+  id: string;
+  studentName: string;
+  age: number;
+  parentName: string;
+  phone: string;
+  email: string;
+  location: 'KATY' | 'SUGARLAND';
+  requestedDay: DayKey;
+  notes?: string | null;
+  createdAt: string;
+}
+
+
 const prices = {
   KATY: { Monday: 0, Tuesday: 245, Wednesday: 245, Thursday: 0, both: 450 },
   SUGARLAND: { Monday: 230, Tuesday: 0, Wednesday: 0, Thursday: 245, both: 450 },
@@ -372,6 +388,161 @@ const PaymentTable: React.FC<{ students: Student[]; onStatusUpdate: (id: string,
   );
 };
 
+const WaitlistTable: React.FC<{ entries: WaitlistEntry[]; title?: string }> = ({ entries, title = 'Waitlist' }) => {
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(0);
+  const perPage = 5;
+  const totalPages = Math.ceil(entries.length / perPage);
+  const paginated = entries.slice(page * perPage, page * perPage + perPage);
+
+  const toggleRow = (id: string) => {
+    setExpandedRows(prev => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
+  };
+
+  const emailAll = () => {
+    if (entries.length === 0) return;
+    const uniqueEmails = Array.from(new Set(entries.map(e => e.email.trim()).filter(Boolean)));
+    const bcc = encodeURIComponent(uniqueEmails.join(','));
+    const subject = encodeURIComponent('Baila Kids – Waitlist Update');
+    window.location.href = `mailto:?bcc=${bcc}&subject=${subject}`;
+  };
+
+  const pretty = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) +
+           ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  return (
+    <section className="admin-section fade-in" style={{ marginTop: '2rem' }}>
+      <div className="admin-section__header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <h2 style={{ margin: 0 }}>{title}</h2>
+          <span className="badge">{entries.length}</span>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {entries.length > 0 && (
+            <button className="toggle-btn" onClick={emailAll}>Email all</button>
+          )}
+          {totalPages > 1 && (
+            <div className="pagination-controls" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</button>
+              <span>Page {page + 1} / {totalPages}</span>
+              <button disabled={page === totalPages - 1} onClick={() => setPage(p => p + 1)}>Next</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Desktop */}
+      <div className="table-scroll desktop-only" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+        <table className="admin-table" style={{ width: '100%' }}>
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Requested Day</th>
+              <th>Location</th>
+              <th>Added</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginated.map(e => {
+              const expanded = expandedRows.has(e.id);
+              return (
+                <React.Fragment key={e.id}>
+                  <tr onClick={() => toggleRow(e.id)} className="clickable-row">
+                    <td>{e.studentName}</td>
+                    <td>{e.requestedDay}</td>
+                    <td>{e.location}</td>
+                    <td>{pretty(e.createdAt)}</td>
+                    <td className="arrow">{expanded ? 'v' : '>'}</td>
+                  </tr>
+                  {expanded && (
+                    <tr className="expanded-row">
+                      <td colSpan={5}>
+                        <div className="expanded-content">
+                          <p><strong>Age:</strong> {e.age}</p>
+                          <p><strong>Parent/Guardian:</strong> {e.parentName}</p>
+                          <p><strong>Phone:</strong> {e.phone}</p>
+                          <p>
+                            <strong>Email:</strong> {e.email}
+                            <button
+                              className="toggle-btn"
+                              style={{ marginLeft: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.85rem' }}
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                const subj = encodeURIComponent('Baila Kids – Waitlist');
+                                window.location.href = `mailto:${e.email}?subject=${subj}`;
+                              }}
+                            >
+                              Email
+                            </button>
+                          </p>
+                          {e.notes && <p><strong>Notes:</strong> {e.notes}</p>}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+            {paginated.length === 0 && (
+              <tr><td colSpan={5} style={{ textAlign: 'center' }}>No one on the waitlist.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile */}
+      <div className="mobile-only" style={{ maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
+        {paginated.map(e => {
+          const expanded = expandedRows.has(e.id);
+          return (
+            <div key={e.id} className={`mobile-card ${expanded ? 'expanded' : ''}`} onClick={() => toggleRow(e.id)}>
+              <div className="mobile-card-header">
+                <span className="student-name">{e.studentName}</span>
+                <span className="arrow">{expanded ? 'v' : '>'}</span>
+              </div>
+              <div className="mobile-card-sub">
+                {e.requestedDay} • {e.location} • {pretty(e.createdAt)}
+              </div>
+              {expanded && (
+                <div className="mobile-card-body">
+                  <p><strong>Age:</strong> {e.age}</p>
+                  <p><strong>Parent/Guardian:</strong> {e.parentName}</p>
+                  <p><strong>Phone:</strong> {e.phone}</p>
+                  <p>
+                    <strong>Email:</strong> {e.email}
+                    <button
+                      className="toggle-btn"
+                      style={{ marginLeft: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.85rem' }}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        const subj = encodeURIComponent('Baila Kids – Waitlist');
+                        window.location.href = `mailto:${e.email}?subject=${subj}`;
+                      }}
+                    >
+                      Email
+                    </button>
+                  </p>
+                  {e.notes && <p><strong>Notes:</strong> {e.notes}</p>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+};
+
+
 const AdminPage: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -379,6 +550,10 @@ const AdminPage: React.FC = () => {
   const [globalSearch, setGlobalSearch] = useState('');
   const [foundStudents, setFoundStudents] = useState<Student[]>([]);
   const [expandedStudentIds, setExpandedStudentIds] = useState<Set<string>>(new Set());
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+  const [waitlistLoading, setWaitlistLoading] = useState(true);
+  const [waitlistErr, setWaitlistErr] = useState('');
+
 
   const totalRegistrations = React.useMemo(() => {
   return students.reduce((sum, s) => {
@@ -386,6 +561,7 @@ const AdminPage: React.FC = () => {
     return sum + daysCount;
   }, 0);
 }, [students]);
+
 
 
   useEffect(() => {
@@ -402,6 +578,21 @@ const AdminPage: React.FC = () => {
       }
     })();
   }, []);
+
+  useEffect(() => {
+  (async () => {
+    try {
+      const res = await axios.get<WaitlistEntry[]>('/api/admin/waitlist');
+      setWaitlist(res.data);
+    } catch (e) {
+      console.error(e);
+      setWaitlistErr('Failed to load waitlist.');
+    } finally {
+      setWaitlistLoading(false);
+    }
+  })();
+}, []);
+
 
   const dayOnly = (day: string) =>
     students.filter(s => Array.isArray(s.selectedDays) && s.selectedDays.includes(day));
@@ -660,6 +851,10 @@ const AdminPage: React.FC = () => {
               </div>
             </div>
           </section>
+          {waitlistLoading && <div className="loader">Loading waitlist…</div>}
+          {waitlistErr && !waitlistLoading && <div className="error">{waitlistErr}</div>}
+          {!waitlistLoading && !waitlistErr && <WaitlistTable entries={waitlist} />}
+
 
 
         </>
