@@ -70,6 +70,110 @@ const tuitionFor = (s: Student) => {
   return prices[s.location].both;
 };
 
+// ---- PDF helper ----
+import jsPDF from 'jspdf';
+
+type Row = {
+  studentName?: string | null;
+  age?: number | null;
+  selectedDays?: string[] | null;
+};
+
+export function exportDayPdf(title: string, students: Row[]) {
+  // sort by age ASC (null/undefined ages pushed to end)
+  const rows = [...students].sort((a, b) => {
+    const ax = a.age ?? Number.POSITIVE_INFINITY;
+    const bx = b.age ?? Number.POSITIVE_INFINITY;
+    return ax - bx;
+  });
+
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  const left = 54; // ~0.75" margin
+  const colAge = left + 260;
+  const colDays = left + 320;
+  const usableWidth = 504; // right margin ~ 0.75"
+  let y = 72;
+
+  const lineHeight = 18;
+  const maxWidthName = 240;
+  const maxWidthDays = usableWidth - (colDays - left);
+
+  const toLines = (x: string | string[]) => (Array.isArray(x) ? x : [x]);
+
+  // Header
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text(`${title} Students`, left, y);
+  y += 24;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  y += 18;
+
+  // Column headers
+  const drawHeader = () => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('Name', left, y);
+    doc.text('Age', colAge, y);
+    doc.text('Days', colDays, y);
+    y += 12;
+    doc.setLineWidth(0.5);
+    doc.line(left, y, left + usableWidth, y);
+    y += 15;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(12);
+  };
+
+  drawHeader();
+
+  // Body
+  rows.forEach((s) => {
+    // page break
+    if (y > 730) {
+      doc.addPage();
+      y = 72;
+      drawHeader();
+    }
+
+    const nameLines = toLines(
+      doc.splitTextToSize(s.studentName ?? '', maxWidthName)
+    ) as string[];
+
+    const daysText = (s.selectedDays ?? []).join(', ');
+    const daysLines = toLines(
+      doc.splitTextToSize(daysText, maxWidthDays)
+    ) as string[];
+
+    const rowHeight = Math.max(nameLines.length, daysLines.length) * lineHeight;
+
+    // draw name
+    nameLines.forEach((ln: string, i: number) => {
+      doc.text(ln, left, y + i * lineHeight);
+    });
+
+    // draw age (single line)
+    doc.text(
+      s.age === null || s.age === undefined ? '' : String(s.age),
+      colAge,
+      y
+    );
+
+    // draw days
+    daysLines.forEach((ln: string, i: number) => {
+      doc.text(ln, colDays, y + i * lineHeight);
+    });
+
+    // row separator
+    y += rowHeight;
+    doc.setDrawColor(220);
+    // doc.line(left, y + 4, left + usableWidth, y + 4);
+    y += 8;
+  });
+
+  const fileSafe = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '');
+  doc.save(`${fileSafe}-students.pdf`);
+}
 
 
 
@@ -102,12 +206,21 @@ const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {students.length > 0 && (
-            <button className="toggle-btn" onClick={() => {
-              const emails = students.map(s => s.email).join(',');
-              window.location.href = `mailto:?bcc=${emails}`;
-            }}>
-              Email all
-            </button>
+            <>
+              <button className="toggle-btn" onClick={() => {
+                const emails = students.map(s => s.email).join(',');
+                window.location.href = `mailto:?bcc=${emails}`;
+              }}>
+                Email all
+              </button>
+              <button
+                className="toggle-btn"
+                onClick={() => exportDayPdf(title, students)}
+                title="Download a simple PDF with names, ages, and all days"
+              >
+                PDF
+              </button>
+            </>
           )}
           <button className="toggle-btn" onClick={() => setTableOpen(prev => !prev)}>
             {tableOpen ? 'Hide' : 'Show'}
