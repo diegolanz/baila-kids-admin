@@ -70,110 +70,95 @@ const tuitionFor = (s: Student) => {
   return prices[s.location].both;
 };
 
-// ---- PDF helper ----
-import jsPDF from 'jspdf';
+import * as XLSX from 'xlsx';
 
-type Row = {
-  studentName?: string | null;
-  age?: number | null;
+type RosterStudent = {
+  studentName: string;
+  age: number | null;
   selectedDays?: string[] | null;
+  startDate?: string | null; // e.g. "2025-08-26" or "2025-08-26T00:00:00.000Z"
 };
 
-export function exportDayPdf(title: string, students: Row[]) {
-  // sort by age ASC (null/undefined ages pushed to end)
-  const rows = [...students].sort((a, b) => {
-    const ax = a.age ?? Number.POSITIVE_INFINITY;
-    const bx = b.age ?? Number.POSITIVE_INFINITY;
-    return ax - bx;
+// Map day name → JS getDay() index
+const DOW: Record<string, number> = {
+  Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3,
+  Thursday: 4, Friday: 5, Saturday: 6,
+};
+
+// Parse "YYYY-MM-DD" (or ISO with time) as a **local** date (no UTC shift)
+const parseLocalISO = (iso: string) => {
+  const [datePart] = iso.split('T'); // keep just "YYYY-MM-DD"
+  const [y, m, d] = datePart.split('-').map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1); // local midnight
+};
+
+// Return the same date or the next one that matches target weekday
+const nextOrSameWeekday = (date: Date, targetDow: number) => {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diff = (targetDow - d.getDay() + 7) % 7;
+  d.setDate(d.getDate() + diff);
+  return d;
+};
+
+export function exportAttendanceXlsx(title: string, students: RosterStudent[]) {
+  if (!students?.length) return;
+
+  // Sort roster by age asc (unknown ages last)
+  const rows = [...students].sort(
+    (a, b) => (a.age ?? Number.POSITIVE_INFINITY) - (b.age ?? Number.POSITIVE_INFINITY)
+  );
+
+  // Determine target weekday from the table title (e.g., "Tuesday")
+  const titleWord = title.trim().split(/\s+/)[0]; // "Tuesday" from "Tuesday"
+  let targetDow = DOW[titleWord];
+
+  // Fallback if title isn't a weekday: use first student's first selected day
+  if (targetDow === undefined) {
+    const firstDay = rows.find(s => (s.selectedDays?.length ?? 0) > 0)?.selectedDays![0] ?? 'Monday';
+    targetDow = DOW[firstDay] ?? 1;
+  }
+
+  // Find earliest class date aligned to that weekday (per students' startDate)
+  const candidateStarts = rows
+    .map(s => s.startDate)
+    .filter(Boolean)
+    .map(iso => nextOrSameWeekday(parseLocalISO(String(iso)), targetDow))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  const first = candidateStarts[0] ?? nextOrSameWeekday(new Date(), targetDow);
+
+  // Build 14 weekly dates on that weekday
+  const WEEKS = 14;
+  const sessionDates: Date[] = Array.from({ length: WEEKS }, (_, i) => {
+    const d = new Date(first);
+    d.setDate(d.getDate() + i * 7);
+    return d;
   });
 
-  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-  const left = 54; // ~0.75" margin
-  const colAge = left + 260;
-  const colDays = left + 320;
-  const usableWidth = 504; // right margin ~ 0.75"
-  let y = 72;
+  // Header labels like "Tue 8/26"
+  const header = [
+    'Student',
+    ...sessionDates.map(d =>
+      d.toLocaleDateString('en-US', {month: 'numeric', day: 'numeric' })
+    ),
+  ];
 
-  const lineHeight = 18;
-  const maxWidthName = 240;
-  const maxWidthDays = usableWidth - (colDays - left);
+  // AoA: first column "Name (Age)", blank cells for checkmarks
+  const aoa: (string | number)[][] = [
+    header,
+    ...rows.map(r => [r.age != null ? `${r.studentName} (${r.age})` : r.studentName, ...Array(WEEKS).fill('')]),
+  ];
+ 
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 28 }, ...Array(WEEKS).fill({ wch: 10 })]; // widths
+  ws['!freeze'] = { xSplit: 1, ySplit: 1 }; // freeze header + roster col
 
-  const toLines = (x: string | string[]) => (Array.isArray(x) ? x : [x]);
-
-  // Header
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.text(`${title} Students`, left, y);
-  y += 24;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11);
-  y += 18;
-
-  // Column headers
-  const drawHeader = () => {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.text('Name', left, y);
-    doc.text('Age', colAge, y);
-    doc.text('Days', colDays, y);
-    y += 12;
-    doc.setLineWidth(0.5);
-    doc.line(left, y, left + usableWidth, y);
-    y += 15;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(12);
-  };
-
-  drawHeader();
-
-  // Body
-  rows.forEach((s) => {
-    // page break
-    if (y > 730) {
-      doc.addPage();
-      y = 72;
-      drawHeader();
-    }
-
-    const nameLines = toLines(
-      doc.splitTextToSize(s.studentName ?? '', maxWidthName)
-    ) as string[];
-
-    const daysText = (s.selectedDays ?? []).join(', ');
-    const daysLines = toLines(
-      doc.splitTextToSize(daysText, maxWidthDays)
-    ) as string[];
-
-    const rowHeight = Math.max(nameLines.length, daysLines.length) * lineHeight;
-
-    // draw name
-    nameLines.forEach((ln: string, i: number) => {
-      doc.text(ln, left, y + i * lineHeight);
-    });
-
-    // draw age (single line)
-    doc.text(
-      s.age === null || s.age === undefined ? '' : String(s.age),
-      colAge,
-      y
-    );
-
-    // draw days
-    daysLines.forEach((ln: string, i: number) => {
-      doc.text(ln, colDays, y + i * lineHeight);
-    });
-
-    // row separator
-    y += rowHeight;
-    doc.setDrawColor(220);
-    // doc.line(left, y + 4, left + usableWidth, y + 4);
-    y += 8;
-  });
-
-  const fileSafe = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '');
-  doc.save(`${fileSafe}-students.pdf`);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, (title || 'Roster').slice(0, 31));
+  XLSX.writeFile(wb, `${title.toLowerCase().replace(/\s+/g, '-')}-attendance.xlsx`);
 }
+
+
 
 
 
@@ -207,21 +192,26 @@ const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {students.length > 0 && (
             <>
-              <button className="toggle-btn" onClick={() => {
-                const emails = students.map(s => s.email).join(',');
-                window.location.href = `mailto:?bcc=${emails}`;
-              }}>
-                Email all
-              </button>
               <button
                 className="toggle-btn"
-                onClick={() => exportDayPdf(title, students)}
-                title="Download a simple PDF with names, ages, and all days"
+                onClick={() => {
+                  const emails = students.map(s => s.email).join(',');
+                  window.location.href = `mailto:?bcc=${emails}`;
+                }}
               >
-                PDF
+                Email all
+              </button>
+
+              <button
+                className="toggle-btn"
+                onClick={() => exportAttendanceXlsx(title, students)}
+                title="Download Excel roster with 14 weeks of dates"
+              >
+                Attendance XLSX
               </button>
             </>
           )}
+
           <button className="toggle-btn" onClick={() => setTableOpen(prev => !prev)}>
             {tableOpen ? 'Hide' : 'Show'}
           </button>
