@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
 // import { FaEnvelope } from 'react-icons/fa';
 
 interface Student {
@@ -160,6 +163,68 @@ export function exportAttendanceXlsx(title: string, students: RosterStudent[]) {
 
 
 
+function fmtDate(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+/**
+ * Creates a single-page-or-multipage roster PDF for one day.
+ * Expects the `students` param to already be filtered to that day (or we’ll show all given).
+ */
+function exportRosterPDF(title: string, students: Student[]) {
+  const list = [...students].sort((a, b) => (a.age ?? 0) - (b.age ?? 0));
+  if (list.length === 0) {
+    alert(`No students found for ${title}.`);
+    return;
+  }
+
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+
+  // Header
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text(`Baila Kids – ${title} Roster`, 40, 48);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Generated: ${new Date().toLocaleString('en-US')}`, 40, 64);
+  doc.text(`Students: ${list.length}`, 40, 78);
+
+  // Table: Name, Age, Days
+  const head = [['Name', 'Age', 'Days']];
+  const body = list.map((s) => [
+    s.studentName ?? '',
+    String(s.age ?? ''),
+    (s.selectedDays ?? []).length ? (s.selectedDays ?? []).join(', ') : '—',
+  ]);
+
+  autoTable(doc, {
+    head,
+    body,
+    startY: 100,
+    styles: { fontSize: 10, cellPadding: 6, overflow: 'linebreak' },
+    headStyles: { halign: 'left' },
+    bodyStyles: { halign: 'left' },
+    columnStyles: {
+      0: { cellWidth: 260 },              // Name
+      1: { cellWidth: 40, halign: 'right' }, // Age
+      2: { cellWidth: 210 },              // Days
+    },
+    theme: 'grid',
+  });
+
+  const now = new Date();
+  const fname = `baila-${title.toLowerCase().replace(/\s+/g, '-')}-roster-${now
+    .toISOString()
+    .slice(0, 10)}.pdf`;
+  doc.save(fname);
+}
+
+
+
+
 
 
 
@@ -226,11 +291,12 @@ const StudentsTable: React.FC<{ title: string; students: Student[]; onStatusUpda
 
               <button
                 className="toggle-btn"
-                onClick={() => exportAttendanceXlsx(title, students)}
-                title="Download Excel roster with 14 weeks of dates"
+                onClick={() => exportRosterPDF(title, students)}
+                title="Download printable roster PDF"
               >
-                Excel
+                PDF
               </button>
+
             </>
           )}
 
