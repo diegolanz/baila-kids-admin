@@ -165,14 +165,34 @@ export function exportAttendanceXlsx(title: string, students: RosterStudent[]) {
 
 
 
-const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title, students }) => {
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+const StudentsTable: React.FC<{ title: string; students: Student[]; onStatusUpdate: (id: string, newStatus: Student['paymentStatus']) => Promise<void> }>
+  = ({ title, students, onStatusUpdate }) => {  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(0);
   const [tableOpen, setTableOpen] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<Record<string, Student['paymentStatus']>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
+
 
   const perPage = 5;
   const totalPages = Math.ceil(students.length / perPage);
   const paginated = students.slice(page * perPage, page * perPage + perPage);
+
+  async function handleStatusUpdate(id: string, newStatus: 'PENDING'|'PAID'|'FAILED') {
+  const res = await fetch('/api/admin/students', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, paymentStatus: newStatus }),
+  });
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error(j?.error || 'Failed to update payment status');
+  }
+
+  // Optional: if you have a top-level students state, keep UI in sync optimistically
+  // if (typeof setStudents === 'function') {
+  //   setStudents(prev => prev.map(st => st.id === id ? { ...st, paymentStatus: newStatus } : st));
+  // }
+}
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => {
@@ -181,6 +201,8 @@ const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title
       return newSet;
     });
   };
+
+  
 
   return (
     <section className="admin-section fade-in">
@@ -207,7 +229,7 @@ const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title
                 onClick={() => exportAttendanceXlsx(title, students)}
                 title="Download Excel roster with 14 weeks of dates"
               >
-                Attendance XLSX
+                Excel
               </button>
             </>
           )}
@@ -266,6 +288,42 @@ const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title
                               <p><strong>Frequency:</strong> {s.frequency === 'ONCE_A_WEEK' ? 'Once' : 'Twice'}</p>
                               <p><strong>Day(s):</strong> {s.selectedDays.join(', ')}</p>
                               <p><strong>Start Date:</strong> {formatDatePretty(s.startDate)}</p>
+                              <p style={{ color: calculateOwed(s) === 0 ? 'green' : 'red' }}>
+                                <strong>Owes:</strong> ${calculateOwed(s)}
+                              </p>
+
+                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <label htmlFor={`status-${s.id}`}>Payment Status:</label>
+                                <select
+                                  id={`status-${s.id}`}
+                                  value={pendingStatus[s.id] ?? s.paymentStatus}
+                                  onChange={(e) => setPendingStatus(prev => ({ ...prev, [s.id]: e.target.value as Student['paymentStatus'] }))}
+                                >
+                                  <option value="PENDING">PENDING</option>
+                                  <option value="PAID">PAID</option>
+                                  <option value="FAILED">FAILED</option>
+                                </select>
+
+                                <button
+                                  onClick={async (ev) => {
+                                    ev.stopPropagation();
+                                    const newStatus = pendingStatus[s.id] ?? s.paymentStatus;
+                                    setSavingId(s.id);
+                                    try {
+                                      await onStatusUpdate(s.id, newStatus); 
+                                      setPendingStatus(prev => {
+                                        const { [s.id]: _, ...rest } = prev; 
+                                        return rest;
+                                      });
+                                    } finally {
+                                      setSavingId(null);
+                                    }
+                                  }}
+                                  disabled={savingId === s.id}
+                                >
+                                  {savingId === s.id ? 'Saving…' : 'Save'}
+                                </button>
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -282,14 +340,19 @@ const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title
             {paginated.map(s => {
               const expanded = expandedRows.has(s.id);
               return (
-                <div key={s.id} className={`mobile-card ${expanded ? 'expanded' : ''}`} onClick={() => toggleRow(s.id)}>
-                  <div className="mobile-card-header">
+                <div key={s.id} className={`mobile-card ${expanded ? 'expanded' : ''}`}>
+                  <div
+                    className="mobile-card-header"
+                    onClick={() => toggleRow(s.id)}
+                    role="button"
+                    aria-expanded={expanded}
+                  >
                     <span className="student-name">{s.studentName}</span>
                     <span className={`pill pill--${s.paymentStatus.toLowerCase()}`}>{s.paymentStatus}</span>
                     <span className="arrow">{expanded ? 'v' : '>'}</span>
                   </div>
                   {expanded && (
-                    <div className="mobile-card-body">
+                      <div className="mobile-card-body" onClick={(e) => e.stopPropagation()}>
                       <p><strong>Age:</strong> {s.age}</p>
                       <p><strong>Parent/Guardian:</strong> {s.parentName}</p>
                       <p><strong>Phone:</strong> {s.phone}</p>
@@ -310,6 +373,57 @@ const StudentsTable: React.FC<{ title: string; students: Student[] }> = ({ title
                       <p><strong>Frequency:</strong> {s.frequency === 'ONCE_A_WEEK' ? 'Once' : 'Twice'}</p>
                       <p><strong>Day(s):</strong> {s.selectedDays.join(', ')}</p>
                       <p><strong>Start Date:</strong> {formatDatePretty(s.startDate)}</p>
+                      <p style={{ color: calculateOwed(s) === 0 ? 'green' : 'red' }}>
+                        <strong>Owes:</strong> ${calculateOwed(s)}
+                      </p>
+
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <select
+                          value={pendingStatus[s.id] ?? s.paymentStatus}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            setPendingStatus(prev => ({ ...prev, [s.id]: e.target.value as Student['paymentStatus'] }));
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          aria-label={`Payment status for ${s.studentName}`}
+                          style={{
+                            flex: 1,
+                            padding: '0.6rem',
+                            borderRadius: 6,
+                            border: '1px solid #ccc',
+                            background: '#fff',
+                            fontSize: '0.9rem',
+                            appearance: 'none' as const
+                          }}
+                        >
+                          <option value="PENDING">PENDING</option>
+                          <option value="PAID">PAID</option>
+                          <option value="FAILED">FAILED</option>
+                        </select>
+
+                        <button
+  className="toggle-btn"
+  onClick={async (e) => {
+    e.stopPropagation();
+    const newStatus = pendingStatus[s.id] ?? s.paymentStatus;
+    setSavingId(s.id);
+    try {
+      await onStatusUpdate(s.id, newStatus);
+      setPendingStatus(p => { const { [s.id]:_, ...rest } = p; return rest; });
+    } finally {
+      setSavingId(null);
+    }
+  }}
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  disabled={savingId === s.id}
+>
+                          {savingId === s.id ? '...' : 'Save'}
+                        </button>
+                      </div>
+
                     </div>
                   )}
                 </div>
@@ -893,17 +1007,18 @@ const AdminPage: React.FC = () => {
       {!loading && !err && (
         <>
           <div className="grid">
-            <StudentsTable title="All Students" students={students} />
+            <StudentsTable title="All Students" students={students} onStatusUpdate={handleStatusUpdate} />
           </div>
           <div className="grid grid--two">
-            <StudentsTable title="Monday" students={dayOnly('Monday')} />
-            <StudentsTable title="Tuesday" students={dayOnly('Tuesday')} />
+            <StudentsTable title="Monday" students={dayOnly('Monday')} onStatusUpdate={handleStatusUpdate} />
+            <StudentsTable title="Tuesday" students={dayOnly('Tuesday')} onStatusUpdate={handleStatusUpdate} />
           </div>
           <div className="grid grid--two">
-            <StudentsTable title="Wednesday" students={dayOnly('Wednesday')} />
-            <StudentsTable title="Thursday" students={dayOnly('Thursday')} />
+            <StudentsTable title="Wednesday" students={dayOnly('Wednesday')} onStatusUpdate={handleStatusUpdate} />
+            <StudentsTable title="Thursday" students={dayOnly('Thursday')} onStatusUpdate={handleStatusUpdate} />
           </div>
-          <PaymentTable students={students} onStatusUpdate={handleStatusUpdate} />
+
+          {/* <PaymentTable students={students} onStatusUpdate={handleStatusUpdate} /> */}
           {/* Earnings Section */}
             {/* Earnings Section */}
           <section className="admin-section fade-in earnings-section" style={{ marginTop: '2rem' }}>
