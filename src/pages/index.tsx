@@ -16,6 +16,11 @@ interface Student {
   frequency: 'ONCE_A_WEEK' | 'TWICE_A_WEEK';
   selectedDays: string[];
   startDate: string;
+
+  // NEW FIELDS from API
+  sessionLabel?: 'A' | 'B' | null;
+  startDatesByDay?: Partial<Record<'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday', string>>;
+
   paymentStatus: 'PENDING' | 'PAID' | 'FAILED';
   paymentMethod?: string | null;
   liabilityAccepted?: boolean;
@@ -23,19 +28,41 @@ interface Student {
   waiverAddress?: string | null;
 }
 
+
+
 function formatDatePretty(iso: string) {
   if (!iso) return '';
-  const d = new Date(iso);
+  // Use only the date part and parse as *local* calendar date
+  const [dateOnly] = iso.split('T');
+  const d = dateOnly ? parseLocalISO(dateOnly) : new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
-    year: 'numeric'
+    year: 'numeric',
   });
 }
 
-type DayKey = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday';
+
+
+
+
+function chooseStartDateIso(s: Student): string {
+  // prefer per-day start dates from the correct session
+  const fromDays = (s.startDatesByDay && s.selectedDays?.length)
+    ? s.selectedDays.map(d => s.startDatesByDay?.[d as DayKey]).filter(Boolean) as string[]
+    : [];
+
+  if (fromDays.length) {
+    // ISO strings sort chronologically
+    return [...fromDays].sort()[0];
+  }
+
+  return s.startDate;
+}
+
+
 
 interface WaitlistEntry {
   id: string;
@@ -51,27 +78,51 @@ interface WaitlistEntry {
 }
 
 
-const prices = {
-  KATY: { Monday: 0, Tuesday: 245, Wednesday: 245, Thursday: 0, both: 450 },
-  SUGARLAND: { Monday: 230, Tuesday: 0, Wednesday: 0, Thursday: 245, both: 450 },
-} as const;
+type LocationKey = 'KATY' | 'SUGARLAND';
+type SessionKey = 'A' | 'B';
+type DayKey = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday';
+
+// Only 'both' is required; per-day keys are optional
+type PriceRow = { both: number } & Partial<Record<DayKey, number>>;
+type PriceTable = Record<LocationKey, Record<SessionKey, PriceRow>>;
+
+
+const prices: PriceTable = {
+  KATY: {
+    A: { Tuesday: 245, Wednesday: 245, both: 450 },
+    B: { Tuesday: 245, Wednesday: 245, both: 450 },
+  },
+  SUGARLAND: {
+    A: { Monday: 230, Thursday: 245, both: 450 },
+    B: { Monday: 195, Thursday: 195, both: 380 }, // adjust if your B prices differ
+  },
+};
+
+
 
 const calculateOwed = (s: Student) => {
   if (s.paymentStatus === 'PAID') return 0;
+  const session: SessionKey = (s.sessionLabel ?? 'A') as SessionKey;
+  const loc = s.location as LocationKey;
+
   if (s.frequency === 'ONCE_A_WEEK') {
-    const day = s.selectedDays[0] as keyof typeof prices['KATY'];
-    return prices[s.location][day] || 0;
+    const day = (s.selectedDays?.[0] ?? 'Monday') as DayKey;
+    return prices[loc][session][day] ?? 0;
   }
-  return prices[s.location].both;
+  return prices[loc][session].both;
 };
 
 const tuitionFor = (s: Student) => {
+  const session: SessionKey = (s.sessionLabel ?? 'A') as SessionKey;
+  const loc = s.location as LocationKey;
+
   if (s.frequency === 'ONCE_A_WEEK') {
-    const day = (s.selectedDays?.[0] ?? '') as keyof typeof prices['KATY'];
-    return prices[s.location][day] ?? 0;
+    const day = (s.selectedDays?.[0] ?? 'Monday') as DayKey;
+    return prices[loc][session][day] ?? 0;
   }
-  return prices[s.location].both;
+  return prices[loc][session].both;
 };
+
 
 import * as XLSX from 'xlsx';
 
@@ -89,11 +140,12 @@ const DOW: Record<string, number> = {
 };
 
 // Parse "YYYY-MM-DD" (or ISO with time) as a **local** date (no UTC shift)
-const parseLocalISO = (iso: string) => {
-  const [datePart] = iso.split('T'); // keep just "YYYY-MM-DD"
-  const [y, m, d] = datePart.split('-').map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1); // local midnight
-};
+// Parse a YYYY-MM-DD string as a *local* date (no UTC shift)
+function parseLocalISO(dateOnly: string) {
+  const [y, m, d] = dateOnly.split('-').map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1);
+}
+
 
 // Return the same date or the next one that matches target weekday
 const nextOrSameWeekday = (date: Date, targetDow: number) => {
@@ -353,7 +405,8 @@ const StudentsTable: React.FC<{ title: string; students: Student[]; onStatusUpda
                               <p><strong>Location:</strong> {s.location}</p>
                               <p><strong>Frequency:</strong> {s.frequency === 'ONCE_A_WEEK' ? 'Once' : 'Twice'}</p>
                               <p><strong>Day(s):</strong> {s.selectedDays.join(', ')}</p>
-                              <p><strong>Start Date:</strong> {formatDatePretty(s.startDate)}</p>
+<p><strong>Session:</strong> {s.sessionLabel ?? '—'}</p>
+<p><strong>Start Date:</strong> {formatDatePretty(chooseStartDateIso(s))}</p>
                               <p style={{ color: calculateOwed(s) === 0 ? 'green' : 'red' }}>
                                 <strong>Owes:</strong> ${calculateOwed(s)}
                               </p>
@@ -438,7 +491,8 @@ const StudentsTable: React.FC<{ title: string; students: Student[]; onStatusUpda
                       <p><strong>Location:</strong> {s.location}</p>
                       <p><strong>Frequency:</strong> {s.frequency === 'ONCE_A_WEEK' ? 'Once' : 'Twice'}</p>
                       <p><strong>Day(s):</strong> {s.selectedDays.join(', ')}</p>
-                      <p><strong>Start Date:</strong> {formatDatePretty(s.startDate)}</p>
+<p><strong>Session:</strong> {s.sessionLabel ?? '—'}</p>
+<p><strong>Start Date:</strong> {formatDatePretty(chooseStartDateIso(s))}</p>
                       <p style={{ color: calculateOwed(s) === 0 ? 'green' : 'red' }}>
                         <strong>Owes:</strong> ${calculateOwed(s)}
                       </p>
@@ -877,6 +931,7 @@ const AdminPage: React.FC = () => {
 }, []);
 
 
+
   const dayOnly = (day: string) =>
     students.filter(s => Array.isArray(s.selectedDays) && s.selectedDays.includes(day));
 
@@ -1052,7 +1107,8 @@ const AdminPage: React.FC = () => {
                     <p><strong>Location:</strong> {s.location}</p>
                     <p><strong>Frequency:</strong> {s.frequency === 'ONCE_A_WEEK' ? 'Once' : 'Twice'}</p>
                     <p><strong>Day(s):</strong> {s.selectedDays.join(', ')}</p>
-                    <p><strong>Start Date:</strong> {formatDatePretty(s.startDate)}</p>
+<p><strong>Session:</strong> {s.sessionLabel ?? '—'}</p>
+<p><strong>Start Date:</strong> {formatDatePretty(chooseStartDateIso(s))}</p>
                     <p style={{ color: calculateOwed(s) === 0 ? 'green' : 'red' }}>
                       <strong>Owes:</strong> ${calculateOwed(s)}
                     </p>
