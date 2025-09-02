@@ -215,11 +215,11 @@ export function exportAttendanceXlsx(title: string, students: RosterStudent[]) {
 
 
 
-function fmtDate(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-}
+// function fmtDate(iso: string) {
+//   const d = new Date(iso);
+//   if (Number.isNaN(d.getTime())) return iso;
+//   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+// }
 
 /**
  * Creates a single-page-or-multipage roster PDF for one day.
@@ -294,22 +294,22 @@ const StudentsTable: React.FC<{ title: string; students: Student[]; onStatusUpda
   const totalPages = Math.ceil(students.length / perPage);
   const paginated = students.slice(page * perPage, page * perPage + perPage);
 
-  async function handleStatusUpdate(id: string, newStatus: 'PENDING'|'PAID'|'FAILED') {
-  const res = await fetch('/api/admin/students', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, paymentStatus: newStatus }),
-  });
-  if (!res.ok) {
-    const j = await res.json().catch(() => ({}));
-    throw new Error(j?.error || 'Failed to update payment status');
-  }
+//   async function handleStatusUpdate(id: string, newStatus: 'PENDING'|'PAID'|'FAILED') {
+//   const res = await fetch('/api/admin/students', {
+//     method: 'PUT',
+//     headers: { 'Content-Type': 'application/json' },
+//     body: JSON.stringify({ id, paymentStatus: newStatus }),
+//   });
+//   if (!res.ok) {
+//     const j = await res.json().catch(() => ({}));
+//     throw new Error(j?.error || 'Failed to update payment status');
+//   }
 
-  // Optional: if you have a top-level students state, keep UI in sync optimistically
-  // if (typeof setStudents === 'function') {
-  //   setStudents(prev => prev.map(st => st.id === id ? { ...st, paymentStatus: newStatus } : st));
-  // }
-}
+//   // Optional: if you have a top-level students state, keep UI in sync optimistically
+//   // if (typeof setStudents === 'function') {
+//   //   setStudents(prev => prev.map(st => st.id === id ? { ...st, paymentStatus: newStatus } : st));
+//   // }
+// }
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => {
@@ -431,9 +431,11 @@ const StudentsTable: React.FC<{ title: string; students: Student[]; onStatusUpda
                                     try {
                                       await onStatusUpdate(s.id, newStatus); 
                                       setPendingStatus(prev => {
-                                        const { [s.id]: _, ...rest } = prev; 
-                                        return rest;
+                                        const next = { ...prev };
+                                        delete next[s.id];
+                                        return next;
                                       });
+
                                     } finally {
                                       setSavingId(null);
                                     }
@@ -531,7 +533,11 @@ const StudentsTable: React.FC<{ title: string; students: Student[]; onStatusUpda
     setSavingId(s.id);
     try {
       await onStatusUpdate(s.id, newStatus);
-      setPendingStatus(p => { const { [s.id]:_, ...rest } = p; return rest; });
+      setPendingStatus(p => {
+  const next = { ...p };
+  delete next[s.id];
+  return next;
+});
     } finally {
       setSavingId(null);
     }
@@ -1140,7 +1146,7 @@ const AdminPage: React.FC = () => {
             <StudentsTable title="Thursday" students={dayOnly('Thursday')} onStatusUpdate={handleStatusUpdate} />
           </div>
 
-          {/* <PaymentTable students={students} onStatusUpdate={handleStatusUpdate} /> */}
+          <PaymentTable students={students} onStatusUpdate={handleStatusUpdate} />
           {/* Earnings Section */}
             {/* Earnings Section */}
           <section className="admin-section fade-in earnings-section" style={{ marginTop: '2rem' }}>
