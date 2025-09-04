@@ -617,6 +617,153 @@ select.form-input:focus {
 }
 
 
+/* =========================
+   Admin – Section Editor
+   ========================= */
+.section-editor {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.75rem;
+  align-items: end;
+  background: var(--card);
+  border: 1px solid var(--muted);
+  border-radius: 12px;
+  padding: 0.75rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.section-field { display: flex; flex-direction: column; gap: 6px; }
+.section-label { font-weight: 600; color: var(--text-strong); }
+
+.section-select {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #cfcfcf;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.95rem;
+  outline: none;
+  transition: box-shadow .15s ease, border-color .15s ease;
+}
+.section-select:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(255, 77, 145, 0.15);
+}
+
+.section-actions { align-self: end; }
+.section-actions .toggle-btn {
+  margin: 0;
+  padding: 0.6rem 1rem;
+}
+
+/* Hide the ' — SOLD OUT' suffix on disabled options in some browsers
+   while still keeping them disabled for selection */
+.section-select option[disabled] {
+  color: #999;
+}
+
+/* Responsive: stack on small screens */
+@media (max-width: 720px) {
+  .section-editor {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  .section-actions { width: 100%; }
+  .section-actions .toggle-btn { width: 100%; }
+}
+/* =========================
+   Admin – Layout polish
+   ========================= */
+
+/* Two-column split inside expanded student row:
+   left = Payment section, right = Day/Section editor */
+.admin-split {
+  display: grid;
+  grid-template-columns: 1fr 320px;  /* content + slim control pane */
+  gap: 16px;
+  align-items: start;
+  margin-top: 0.5rem;
+}
+
+/* collapses to single column on tablets/phones */
+@media (max-width: 980px) {
+  .admin-split { grid-template-columns: 1fr; }
+}
+
+/* both panels share the same card treatment */
+.admin-pane {
+  background: var(--card);
+  border: 1px solid var(--muted);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 12px;
+}
+
+/* inline alignment for simple rows like Payment controls */
+.admin-inline {
+  display: grid;
+  grid-template-columns: auto 1fr auto; /* label | select | button */
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-inline label {
+  font-weight: 600;
+  color: var(--text-strong);
+  white-space: nowrap;
+  margin: 0; /* override any inherited spacing */
+}
+
+/* unify selects used in admin */
+.admin-inline select,
+.section-select {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #cfcfcf;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.95rem;
+  outline: none;
+  transition: box-shadow .15s ease, border-color .15s ease;
+}
+.admin-inline select:focus,
+.section-select:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(255, 77, 145, 0.15);
+}
+
+/* reuse your existing button look but tighten spacing in cards */
+.admin-pane .toggle-btn {
+  margin: 0;
+  padding: 0.55rem 1rem;
+}
+
+/* =========================
+   Section Editor cleanup
+   (keeps your earlier styles but ensures alignment)
+   ========================= */
+.section-editor {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto; /* Day | Section | Save */
+  gap: 10px;
+  align-items: end;
+  background: var(--card);
+  border: 0;                /* already inside admin-pane border */
+  border-radius: 0;         /* let parent pane show curvature */
+  box-shadow: none;         /* reduce visual noise */
+  padding: 0;               /* spacing handled by admin-pane */
+}
+
+.section-field { display: flex; flex-direction: column; gap: 6px; }
+.section-label { font-weight: 600; color: var(--text-strong); }
+
+/* SOLD OUT options look disabled */
+.section-select option[disabled] { color: #999; }
+
+/* Stack nicely on narrow phones */
+@media (max-width: 520px) {
+  .section-editor { grid-template-columns: 1fr; }
+  .section-actions .toggle-btn { width: 100%; }
+}
 
 
 

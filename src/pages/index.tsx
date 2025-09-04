@@ -82,6 +82,17 @@ type LocationKey = 'KATY' | 'SUGARLAND';
 type SessionKey = 'A' | 'B';
 type DayKey = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday';
 
+// Section metadata used by the admin day/section editor
+type SectionMeta = {
+  id: string;
+  location: LocationKey;
+  day: DayKey;
+  label: SessionKey;     // 'A' | 'B'
+  isFull: boolean;       // true ⇒ SOLD OUT (disabled)
+  startDate?: string;    // optional, if you expose it
+};
+
+
 // Only 'both' is required; per-day keys are optional
 type PriceRow = { both: number } & Partial<Record<DayKey, number>>;
 type PriceTable = Record<LocationKey, Record<SessionKey, PriceRow>>;
@@ -282,8 +293,15 @@ function exportRosterPDF(title: string, students: Student[]) {
 
 
 
-const StudentsTable: React.FC<{ title: string; students: Student[]; onStatusUpdate: (id: string, newStatus: Student['paymentStatus']) => Promise<void> }>
-  = ({ title, students, onStatusUpdate }) => {  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+const StudentsTable: React.FC<{
+  title: string;
+  students: Student[];
+  onStatusUpdate: (id: string, newStatus: Student['paymentStatus']) => Promise<void>;
+  sections?: SectionMeta[];
+  onMoveSection?: (id: string, day: DayKey, label: SessionKey) => Promise<void>;
+}>
+= ({ title, students, onStatusUpdate, sections = [], onMoveSection }) => {
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(0);
   const [tableOpen, setTableOpen] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<Record<string, Student['paymentStatus']>>({});
@@ -318,6 +336,19 @@ const StudentsTable: React.FC<{ title: string; students: Student[]; onStatusUpda
       return newSet;
     });
   };
+
+
+  // Temp selections while editing a student's day/section
+const [pendingMove, setPendingMove] = useState<Record<string, { day: DayKey; label: SessionKey }>>({});
+const [movingId, setMovingId] = useState<string | null>(null);
+
+// Allowed days by location, and available sections for (location, day)
+const dayOptionsFor = (loc: LocationKey): DayKey[] =>
+  loc === 'KATY' ? ['Tuesday', 'Wednesday'] : ['Monday', 'Thursday'];
+
+const sectionsFor = (loc: LocationKey, day: DayKey) =>
+  (sections || []).filter(s => s.location === loc && s.day === day);
+
 
   
 
@@ -444,6 +475,89 @@ const StudentsTable: React.FC<{ title: string; students: Student[]; onStatusUpda
                                 >
                                   {savingId === s.id ? 'Saving…' : 'Save'}
                                 </button>
+                                <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '0.75rem 0' }} />
+
+<div className="section-editor">
+  {/* Day selector */}
+  <div className="section-field">
+    <label className="section-label">Day</label>
+    <select
+      className="section-select"
+      value={(pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey)}
+      onChange={(e) => {
+        const day = e.target.value as DayKey;
+        const label = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
+        setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
+      }}
+    >
+      {dayOptionsFor(s.location as LocationKey).map(d => (
+        <option key={d} value={d}>{d}</option>
+      ))}
+    </select>
+  </div>
+
+  {/* Section selector (SOLD OUT disables) */}
+  <div className="section-field">
+    <label className="section-label">Section</label>
+    {(() => {
+      const chosenDay = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
+      const opts = sectionsFor(s.location as LocationKey, chosenDay);
+      const currentLabel = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
+      return (
+        <select
+          className="section-select"
+          value={currentLabel}
+          onChange={(e) => {
+            const label = e.target.value as SessionKey;
+            const day = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
+            setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
+          }}
+        >
+          {(['A','B'] as SessionKey[]).map(label => {
+            const meta = opts.find(o => o.label === label);
+            const soldOut = !!meta?.isFull;
+            return (
+              <option key={label} value={label} disabled={soldOut}>
+                {label}{soldOut ? ' — SOLD OUT' : ''}
+              </option>
+            );
+          })}
+        </select>
+      );
+    })()}
+  </div>
+
+  {/* Save */}
+  <div className="section-actions">
+    <button
+      className="toggle-btn"
+      disabled={!onMoveSection || movingId === s.id}
+      onClick={async (ev) => {
+        ev.stopPropagation();
+        if (!onMoveSection) return;
+        const choice = pendingMove[s.id] || {
+          day: (s.selectedDays?.[0] as DayKey),
+          label: ((s.sessionLabel ?? 'A') as SessionKey),
+        };
+        setMovingId(s.id);
+        try {
+          await onMoveSection(s.id, choice.day, choice.label);
+          setPendingMove(prev => {
+            const next = { ...prev };
+            delete next[s.id];
+            return next;
+          });
+        } finally {
+          setMovingId(null);
+        }
+      }}
+      title="Move student to the selected day/section"
+    >
+      {movingId === s.id ? 'Moving…' : 'Save Change'}
+    </button>
+  </div>
+</div>
+
                               </div>
                             </div>
                           </td>
@@ -548,6 +662,89 @@ const StudentsTable: React.FC<{ title: string; students: Student[]; onStatusUpda
 >
                           {savingId === s.id ? '...' : 'Save'}
                         </button>
+                        <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '0.75rem 0' }} />
+
+<div className="section-editor">
+  {/* Day selector */}
+  <div className="section-field">
+    <label className="section-label">Day</label>
+    <select
+      className="section-select"
+      value={(pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey)}
+      onChange={(e) => {
+        const day = e.target.value as DayKey;
+        const label = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
+        setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
+      }}
+    >
+      {dayOptionsFor(s.location as LocationKey).map(d => (
+        <option key={d} value={d}>{d}</option>
+      ))}
+    </select>
+  </div>
+
+  {/* Section selector (SOLD OUT disables) */}
+  <div className="section-field">
+    <label className="section-label">Section</label>
+    {(() => {
+      const chosenDay = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
+      const opts = sectionsFor(s.location as LocationKey, chosenDay);
+      const currentLabel = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
+      return (
+        <select
+          className="section-select"
+          value={currentLabel}
+          onChange={(e) => {
+            const label = e.target.value as SessionKey;
+            const day = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
+            setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
+          }}
+        >
+          {(['A','B'] as SessionKey[]).map(label => {
+            const meta = opts.find(o => o.label === label);
+            const soldOut = !!meta?.isFull;
+            return (
+              <option key={label} value={label} disabled={soldOut}>
+                {label}{soldOut ? ' — SOLD OUT' : ''}
+              </option>
+            );
+          })}
+        </select>
+      );
+    })()}
+  </div>
+
+  {/* Save */}
+  <div className="section-actions">
+    <button
+      className="toggle-btn"
+      disabled={!onMoveSection || movingId === s.id}
+      onClick={async (ev) => {
+        ev.stopPropagation();
+        if (!onMoveSection) return;
+        const choice = pendingMove[s.id] || {
+          day: (s.selectedDays?.[0] as DayKey),
+          label: ((s.sessionLabel ?? 'A') as SessionKey),
+        };
+        setMovingId(s.id);
+        try {
+          await onMoveSection(s.id, choice.day, choice.label);
+          setPendingMove(prev => {
+            const next = { ...prev };
+            delete next[s.id];
+            return next;
+          });
+        } finally {
+          setMovingId(null);
+        }
+      }}
+      title="Move student to the selected day/section"
+    >
+      {movingId === s.id ? 'Moving…' : 'Save Change'}
+    </button>
+  </div>
+</div>
+
                       </div>
 
                     </div>
@@ -984,6 +1181,55 @@ const AdminPage: React.FC = () => {
   }, [students]);
 
 
+const [sections, setSections] = useState<SectionMeta[]>([]);
+const [sectionsErr, setSectionsErr] = useState('');
+
+useEffect(() => {
+  (async () => {
+    try {
+      const res = await axios.get<SectionMeta[]>('/api/admin/sections');
+      setSections(res.data || []);
+    } catch (e) {
+      console.error('Failed to load sections', e);
+    }
+  })();
+}, []);
+
+// Move a student to a chosen day/section; backend should update Enrollment + sync Student.selectedDays/sessionLabel/start date
+const handleMoveSection = async (studentId: string, day: DayKey, label: SessionKey) => {
+  await axios.put('/api/admin/enrollment', { studentId, day, label });
+
+  // optimistic UI
+  setStudents(prev => prev.map(s => {
+  if (s.id !== studentId) return s;
+
+  const nextDays =
+    s.frequency === 'ONCE_A_WEEK'
+      ? [day]
+      : [day, ...(s.selectedDays || []).filter(d => d !== day)].slice(0, 2);
+
+  // find the section meta for this location/day/label
+  const sectionMeta = sections.find(
+    sec => sec.location === s.location && sec.day === day && sec.label === label
+  );
+
+  return {
+    ...s,
+    selectedDays: nextDays,
+    sessionLabel: label,
+    startDate: sectionMeta?.startDate ?? s.startDate,  // <-- update to reflect new section
+    // optional: if using per-day dates
+    startDatesByDay: {
+      ...(s.startDatesByDay || {}),
+      [day]: sectionMeta?.startDate ?? s.startDate,
+    },
+  };
+}));
+
+};
+
+
+
 
 
   return (
@@ -1135,18 +1381,49 @@ const AdminPage: React.FC = () => {
       {!loading && !err && (
         <>
           <div className="grid">
-            <StudentsTable title="All Students" students={students} onStatusUpdate={handleStatusUpdate} />
+<StudentsTable
+  title="All Students"
+  students={students}
+  onStatusUpdate={handleStatusUpdate}
+  sections={sections}
+  onMoveSection={handleMoveSection}
+/>
           </div>
           <div className="grid grid--two">
-            <StudentsTable title="Monday" students={dayOnly('Monday')} onStatusUpdate={handleStatusUpdate} />
-            <StudentsTable title="Tuesday" students={dayOnly('Tuesday')} onStatusUpdate={handleStatusUpdate} />
-          </div>
-          <div className="grid grid--two">
-            <StudentsTable title="Wednesday" students={dayOnly('Wednesday')} onStatusUpdate={handleStatusUpdate} />
-            <StudentsTable title="Thursday" students={dayOnly('Thursday')} onStatusUpdate={handleStatusUpdate} />
-          </div>
+  <StudentsTable
+    title="Monday"
+    students={dayOnly('Monday')}
+    onStatusUpdate={handleStatusUpdate}
+    sections={sections}
+    onMoveSection={handleMoveSection}
+  />
+  <StudentsTable
+    title="Tuesday"
+    students={dayOnly('Tuesday')}
+    onStatusUpdate={handleStatusUpdate}
+    sections={sections}
+    onMoveSection={handleMoveSection}
+  />
+</div>
 
-          <PaymentTable students={students} onStatusUpdate={handleStatusUpdate} />
+<div className="grid grid--two">
+  <StudentsTable
+    title="Wednesday"
+    students={dayOnly('Wednesday')}
+    onStatusUpdate={handleStatusUpdate}
+    sections={sections}
+    onMoveSection={handleMoveSection}
+  />
+  <StudentsTable
+    title="Thursday"
+    students={dayOnly('Thursday')}
+    onStatusUpdate={handleStatusUpdate}
+    sections={sections}
+    onMoveSection={handleMoveSection}
+  />
+</div>
+
+          {/* <PaymentTable students={students} onStatusUpdate={handleStatusUpdate} /> */}
           {/* Earnings Section */}
             {/* Earnings Section */}
           <section className="admin-section fade-in earnings-section" style={{ marginTop: '2rem' }}>
