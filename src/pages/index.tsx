@@ -307,67 +307,118 @@ const StudentsTable: React.FC<{
   const [pendingStatus, setPendingStatus] = useState<Record<string, Student['paymentStatus']>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
 
-
   const perPage = 5;
   const totalPages = Math.ceil(students.length / perPage);
   const paginated = students.slice(page * perPage, page * perPage + perPage);
 
-//   async function handleStatusUpdate(id: string, newStatus: 'PENDING'|'PAID'|'FAILED') {
-//   const res = await fetch('/api/admin/students', {
-//     method: 'PUT',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify({ id, paymentStatus: newStatus }),
-//   });
-//   if (!res.ok) {
-//     const j = await res.json().catch(() => ({}));
-//     throw new Error(j?.error || 'Failed to update payment status');
-//   }
-
-//   // Optional: if you have a top-level students state, keep UI in sync optimistically
-//   // if (typeof setStudents === 'function') {
-//   //   setStudents(prev => prev.map(st => st.id === id ? { ...st, paymentStatus: newStatus } : st));
-//   // }
-// }
+  // helper to collapse student rows on open
+  useEffect(() => {
+    if (!tableOpen) return;
+    setExpandedRows(new Set());
+  }, [tableOpen]);
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => {
-      const newSet = new Set(prev);
-      newSet.has(id) ? newSet.delete(id) : newSet.add(id);
-      return newSet;
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
     });
   };
 
-
   // Temp selections while editing a student's day/section
-const [pendingMove, setPendingMove] = useState<Record<string, { day: DayKey; label: SessionKey }>>({});
-const [movingId, setMovingId] = useState<string | null>(null);
+  const [pendingMove, setPendingMove] = useState<Record<string, { day: DayKey; label: SessionKey }>>({});
+  const [movingId, setMovingId] = useState<string | null>(null);
 
-// Allowed days by location, and available sections for (location, day)
-const dayOptionsFor = (loc: LocationKey): DayKey[] =>
-  loc === 'KATY' ? ['Tuesday', 'Wednesday'] : ['Monday', 'Thursday'];
+  // Allowed days by location, and available sections for (location, day)
+  const dayOptionsFor = (loc: LocationKey): DayKey[] =>
+    loc === 'KATY' ? ['Tuesday', 'Wednesday'] : ['Monday', 'Thursday'];
 
-const sectionsFor = (loc: LocationKey, day: DayKey) =>
-  (sections || []).filter(s => s.location === loc && s.day === day);
+  const sectionsFor = (loc: LocationKey, day: DayKey) =>
+    (sections || []).filter(s => s.location === loc && s.day === day);
 
+  // --- Grouping logic for Section A/B (only if multiple sections present) ---
+  const enableGrouping = React.useMemo(() => {
+    const labels = new Set(students.map(s => s.sessionLabel ?? 'Unassigned'));
+    return labels.size > 1; // group only if multiple labels exist in this table
+  }, [students]);
 
-  
+  type SectionBucket = { label: string; items: Student[] };
+
+  const groupedBySection: SectionBucket[] = React.useMemo(() => {
+    const buckets: Record<string, Student[]> = {};
+    for (const s of students) {
+      const label = s.sessionLabel ?? 'Unassigned';
+      if (!buckets[label]) buckets[label] = [];
+      buckets[label].push(s);
+    }
+    Object.keys(buckets).forEach(k => {
+      buckets[k] = buckets[k].sort((a, b) => a.studentName.localeCompare(b.studentName));
+    });
+    return Object.keys(buckets).map(k => ({ label: k, items: buckets[k] }));
+  }, [students]);
+
+  // --- Collapsible group headers ---
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const toggleGroup = (label: string) =>
+    setCollapsedGroups(prev => ({ ...prev, [label]: !prev[label] }));
+
+  // collapse groups on open & whenever grouping changes
+  useEffect(() => {
+    if (!tableOpen || !enableGrouping) return;
+    const next: Record<string, boolean> = {};
+    for (const g of groupedBySection) next[g.label] = true; // true = collapsed
+    setCollapsedGroups(next);
+  }, [tableOpen, enableGrouping, groupedBySection]);
+
+  // --- Header chips: counts per section (A/B/Unassigned) ---
+  const countA = students.filter(s => s.sessionLabel === 'A').length;
+  const countB = students.filter(s => s.sessionLabel === 'B').length;
+  const countU = students.filter(s => !s.sessionLabel).length;
+
+  // --- Mail helpers ---
+  const launchBcc = (emails: string[]) => {
+    // Safer encoding for large lists / special chars
+    const bccValue = encodeURIComponent(emails.join(','));
+    window.location.href = `mailto:?bcc=${bccValue}`;
+  };
+
+  const allEmails = React.useMemo(() => students.map(s => s.email).filter(Boolean), [students]);
 
   return (
     <section className="admin-section fade-in">
       <div className="admin-section__header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <h2 style={{ margin: 0 }}>{title}</h2>
-          <span className="badge">{students.length}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h2 style={{ margin: 0 }}>{title}</h2>
+            <span className="badge">{students.length}</span>
+          </div>
+
+          {/* Group chips appear in the header when grouping is relevant */}
+          {enableGrouping && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <span className="chip">
+                Group A <span className="badge">{countA}</span>
+              </span>
+              <span className="chip">
+                Group B <span className="badge">{countB}</span>
+              </span>
+              {countU > 0 && (
+                <span className="chip">
+                  Unassigned <span className="badge">{countU}</span>
+                </span>
+              )}
+            </div>
+          )}
         </div>
+
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {students.length > 0 && (
             <>
+              {/* UPDATED: day-level Email all uses BCC + encoding */}
               <button
                 className="toggle-btn"
-                onClick={() => {
-                  const emails = students.map(s => s.email).join(',');
-                  window.location.href = `mailto:?bcc=${emails}`;
-                }}
+                onClick={() => launchBcc(allEmails)}
+                title="Email all (BCC)"
               >
                 Email all
               </button>
@@ -379,7 +430,6 @@ const sectionsFor = (loc: LocationKey, day: DayKey) =>
               >
                 PDF
               </button>
-
             </>
           )}
 
@@ -402,7 +452,8 @@ const sectionsFor = (loc: LocationKey, day: DayKey) =>
                 </tr>
               </thead>
               <tbody>
-                {paginated.map(s => {
+                {/* Flat list when only one section is present (use pagination) */}
+                {!enableGrouping && paginated.map(s => {
                   const expanded = expandedRows.has(s.id);
                   return (
                     <React.Fragment key={s.id}>
@@ -422,6 +473,7 @@ const sectionsFor = (loc: LocationKey, day: DayKey) =>
                               <p><strong>Phone:</strong> {s.phone}</p>
                               <p>
                                 <strong>Email:</strong> {s.email}
+                                {/* individual email (single recipient) */}
                                 <button
                                   className="toggle-btn"
                                   style={{ marginLeft: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.85rem' }}
@@ -429,6 +481,7 @@ const sectionsFor = (loc: LocationKey, day: DayKey) =>
                                     e.stopPropagation();
                                     window.location.href = `mailto:${s.email}`;
                                   }}
+                                  title="Email this student"
                                 >
                                   Email
                                 </button>
@@ -436,8 +489,8 @@ const sectionsFor = (loc: LocationKey, day: DayKey) =>
                               <p><strong>Location:</strong> {s.location}</p>
                               <p><strong>Frequency:</strong> {s.frequency === 'ONCE_A_WEEK' ? 'Once' : 'Twice'}</p>
                               <p><strong>Day(s):</strong> {s.selectedDays.join(', ')}</p>
-<p><strong>Session:</strong> {s.sessionLabel ?? '—'}</p>
-<p><strong>Start Date:</strong> {formatDatePretty(chooseStartDateIso(s))}</p>
+                              <p><strong>Session:</strong> {s.sessionLabel ?? '—'}</p>
+                              <p><strong>Start Date:</strong> {formatDatePretty(chooseStartDateIso(s))}</p>
                               <p style={{ color: calculateOwed(s) === 0 ? 'green' : 'red' }}>
                                 <strong>Owes:</strong> ${calculateOwed(s)}
                               </p>
@@ -460,13 +513,12 @@ const sectionsFor = (loc: LocationKey, day: DayKey) =>
                                     const newStatus = pendingStatus[s.id] ?? s.paymentStatus;
                                     setSavingId(s.id);
                                     try {
-                                      await onStatusUpdate(s.id, newStatus); 
+                                      await onStatusUpdate(s.id, newStatus);
                                       setPendingStatus(prev => {
                                         const next = { ...prev };
                                         delete next[s.id];
                                         return next;
                                       });
-
                                     } finally {
                                       setSavingId(null);
                                     }
@@ -475,94 +527,301 @@ const sectionsFor = (loc: LocationKey, day: DayKey) =>
                                 >
                                   {savingId === s.id ? 'Saving…' : 'Save'}
                                 </button>
+
                                 <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '0.75rem 0' }} />
 
-<div className="section-editor">
-  {/* Day selector */}
-  <div className="section-field">
-    <label className="section-label">Day</label>
-    <select
-      className="section-select"
-      value={(pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey)}
-      onChange={(e) => {
-        const day = e.target.value as DayKey;
-        const label = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
-        setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
-      }}
-    >
-      {dayOptionsFor(s.location as LocationKey).map(d => (
-        <option key={d} value={d}>{d}</option>
-      ))}
-    </select>
-  </div>
+                                {/* Section editor */}
+                                <div className="section-editor">
+                                  {/* Day selector */}
+                                  <div className="section-field">
+                                    <label className="section-label">Day</label>
+                                    <select
+                                      className="section-select"
+                                      value={(pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey)}
+                                      onChange={(e) => {
+                                        const day = e.target.value as DayKey;
+                                        const label = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
+                                        setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
+                                      }}
+                                    >
+                                      {dayOptionsFor(s.location as LocationKey).map(d => (
+                                        <option key={d} value={d}>{d}</option>
+                                      ))}
+                                    </select>
+                                  </div>
 
-  {/* Section selector (SOLD OUT disables) */}
-  <div className="section-field">
-    <label className="section-label">Section</label>
-    {(() => {
-      const chosenDay = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
-      const opts = sectionsFor(s.location as LocationKey, chosenDay);
-      const currentLabel = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
-      return (
-        <select
-          className="section-select"
-          value={currentLabel}
-          onChange={(e) => {
-            const label = e.target.value as SessionKey;
-            const day = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
-            setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
-          }}
-        >
-          {(['A','B'] as SessionKey[]).map(label => {
-            const meta = opts.find(o => o.label === label);
-            const soldOut = !!meta?.isFull;
-            return (
-              <option key={label} value={label} disabled={soldOut}>
-                {label}{soldOut ? ' — SOLD OUT' : ''}
-              </option>
-            );
-          })}
-        </select>
-      );
-    })()}
-  </div>
+                                  {/* Section selector */}
+                                  <div className="section-field">
+                                    <label className="section-label">Section</label>
+                                    {(() => {
+                                      const chosenDay = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
+                                      const opts = sectionsFor(s.location as LocationKey, chosenDay);
+                                      const currentLabel = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
+                                      return (
+                                        <select
+                                          className="section-select"
+                                          value={currentLabel}
+                                          onChange={(e) => {
+                                            const label = e.target.value as SessionKey;
+                                            const day = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
+                                            setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
+                                          }}
+                                        >
+                                          {(['A','B'] as SessionKey[]).map(label => {
+                                            const meta = opts.find(o => o.label === label);
+                                            const soldOut = !!meta?.isFull;
+                                            return (
+                                              <option key={label} value={label} disabled={soldOut}>
+                                                {label}{soldOut ? ' — SOLD OUT' : ''}
+                                              </option>
+                                            );
+                                          })}
+                                        </select>
+                                      );
+                                    })()}
+                                  </div>
 
-  {/* Save */}
-  <div className="section-actions">
-    <button
-      className="toggle-btn"
-      disabled={!onMoveSection || movingId === s.id}
-      onClick={async (ev) => {
-        ev.stopPropagation();
-        if (!onMoveSection) return;
-        const choice = pendingMove[s.id] || {
-          day: (s.selectedDays?.[0] as DayKey),
-          label: ((s.sessionLabel ?? 'A') as SessionKey),
-        };
-        setMovingId(s.id);
-        try {
-          await onMoveSection(s.id, choice.day, choice.label);
-          setPendingMove(prev => {
-            const next = { ...prev };
-            delete next[s.id];
-            return next;
-          });
-        } finally {
-          setMovingId(null);
-        }
-      }}
-      title="Move student to the selected day/section"
-    >
-      {movingId === s.id ? 'Moving…' : 'Save Change'}
-    </button>
-  </div>
-</div>
-
+                                  {/* Save */}
+                                  <div className="section-actions">
+                                    <button
+                                      className="toggle-btn"
+                                      disabled={!onMoveSection || movingId === s.id}
+                                      onClick={async (ev) => {
+                                        ev.stopPropagation();
+                                        if (!onMoveSection) return;
+                                        const choice = pendingMove[s.id] || {
+                                          day: (s.selectedDays?.[0] as DayKey),
+                                          label: ((s.sessionLabel ?? 'A') as SessionKey),
+                                        };
+                                        setMovingId(s.id);
+                                        try {
+                                          await onMoveSection(s.id, choice.day, choice.label);
+                                          setPendingMove(prev => {
+                                            const next = { ...prev };
+                                            delete next[s.id];
+                                            return next;
+                                          });
+                                        } finally {
+                                          setMovingId(null);
+                                        }
+                                      }}
+                                      title="Move student to the selected day/section"
+                                    >
+                                      {movingId === s.id ? 'Moving…' : 'Save Change'}
+                                    </button>
+                                  </div>
+                                </div>
+                                {/* /Section editor */}
                               </div>
                             </div>
                           </td>
                         </tr>
                       )}
+                    </React.Fragment>
+                  );
+                })}
+
+                {/* Grouped list when multiple sections present (ignore pagination to keep groups intact) */}
+                {enableGrouping && groupedBySection.map(group => {
+                  const isCollapsed = !!collapsedGroups[group.label];
+                  const groupEmails = group.items.map(g => g.email).filter(Boolean);
+                  return (
+                    <React.Fragment key={group.label}>
+                      <tr
+                        className="group-header clickable-row"
+                        onClick={() => toggleGroup(group.label)}
+                        style={{ background: '#f8fafc', cursor: 'pointer' }}
+                      >
+                        <td colSpan={3} style={{ fontWeight: 700 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span>
+                              <span style={{ marginRight: 8 }}>{isCollapsed ? '>' : 'v'}</span>
+                              Section {group.label}
+                              <span className="badge" style={{ marginLeft: 8 }}>{group.items.length}</span>
+                            </span>
+                            {/* NEW: Email this group (BCC) */}
+                            <button
+                              className="toggle-btn"
+                              onClick={(e) => {
+                                e.stopPropagation(); // don't toggle collapse
+                                launchBcc(groupEmails);
+                              }}
+                              disabled={groupEmails.length === 0}
+                              title={`Email Group ${group.label} (BCC)`}
+                            >
+                              Email group
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {!isCollapsed && group.items.map(s => {
+                        const expanded = expandedRows.has(s.id);
+                        return (
+                          <React.Fragment key={s.id}>
+                            <tr onClick={() => toggleRow(s.id)} className="clickable-row">
+                              <td>{s.studentName}</td>
+                              <td>
+                                <span className={`pill pill--${s.paymentStatus.toLowerCase()}`}>{s.paymentStatus}</span>
+                              </td>
+                              <td className="arrow">{expanded ? 'v' : '>'}</td>
+                            </tr>
+                            {expanded && (
+                              <tr className="expanded-row">
+                                <td colSpan={3}>
+                                  <div className="expanded-content">
+                                    <p><strong>Age:</strong> {s.age}</p>
+                                    <p><strong>Parent/Guardian:</strong> {s.parentName}</p>
+                                    <p><strong>Phone:</strong> {s.phone}</p>
+                                    <p>
+                                      <strong>Email:</strong> {s.email}
+                                      {/* single-recipient email */}
+                                      <button
+                                        className="toggle-btn"
+                                        style={{ marginLeft: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.85rem' }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          window.location.href = `mailto:${s.email}`;
+                                        }}
+                                        title="Email this student"
+                                      >
+                                        Email
+                                      </button>
+                                    </p>
+                                    <p><strong>Location:</strong> {s.location}</p>
+                                    <p><strong>Frequency:</strong> {s.frequency === 'ONCE_A_WEEK' ? 'Once' : 'Twice'}</p>
+                                    <p><strong>Day(s):</strong> {s.selectedDays.join(', ')}</p>
+                                    <p><strong>Session:</strong> {s.sessionLabel ?? '—'}</p>
+                                    <p><strong>Start Date:</strong> {formatDatePretty(chooseStartDateIso(s))}</p>
+                                    <p style={{ color: calculateOwed(s) === 0 ? 'green' : 'red' }}>
+                                      <strong>Owes:</strong> ${calculateOwed(s)}
+                                    </p>
+
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                      <label htmlFor={`status-${s.id}`}>Payment Status:</label>
+                                      <select
+                                        id={`status-${s.id}`}
+                                        value={pendingStatus[s.id] ?? s.paymentStatus}
+                                        onChange={(e) => setPendingStatus(prev => ({ ...prev, [s.id]: e.target.value as Student['paymentStatus'] }))}
+                                      >
+                                        <option value="PENDING">PENDING</option>
+                                        <option value="PAID">PAID</option>
+                                        <option value="FAILED">FAILED</option>
+                                      </select>
+
+                                      <button
+                                        onClick={async (ev) => {
+                                          ev.stopPropagation();
+                                          const newStatus = pendingStatus[s.id] ?? s.paymentStatus;
+                                          setSavingId(s.id);
+                                          try {
+                                            await onStatusUpdate(s.id, newStatus);
+                                            setPendingStatus(prev => {
+                                              const next = { ...prev };
+                                              delete next[s.id];
+                                              return next;
+                                            });
+                                          } finally {
+                                            setSavingId(null);
+                                          }
+                                        }}
+                                        disabled={savingId === s.id}
+                                      >
+                                        {savingId === s.id ? 'Saving…' : 'Save'}
+                                      </button>
+
+                                      <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '0.75rem 0' }} />
+
+                                      {/* Section editor */}
+                                      <div className="section-editor">
+                                        {/* Day selector */}
+                                        <div className="section-field">
+                                          <label className="section-label">Day</label>
+                                          <select
+                                            className="section-select"
+                                            value={(pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey)}
+                                            onChange={(e) => {
+                                              const day = e.target.value as DayKey;
+                                              const label = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
+                                              setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
+                                            }}
+                                          >
+                                            {dayOptionsFor(s.location as LocationKey).map(d => (
+                                              <option key={d} value={d}>{d}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+
+                                        {/* Section selector */}
+                                        <div className="section-field">
+                                          <label className="section-label">Section</label>
+                                          {(() => {
+                                            const chosenDay = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
+                                            const opts = sectionsFor(s.location as LocationKey, chosenDay);
+                                            const currentLabel = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
+                                            return (
+                                              <select
+                                                className="section-select"
+                                                value={currentLabel}
+                                                onChange={(e) => {
+                                                  const label = e.target.value as SessionKey;
+                                                  const day = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
+                                                  setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
+                                                }}
+                                              >
+                                                {(['A','B'] as SessionKey[]).map(label => {
+                                                  const meta = opts.find(o => o.label === label);
+                                                  const soldOut = !!meta?.isFull;
+                                                  return (
+                                                    <option key={label} value={label} disabled={soldOut}>
+                                                      {label}{soldOut ? ' — SOLD OUT' : ''}
+                                                    </option>
+                                                  );
+                                                })}
+                                              </select>
+                                            );
+                                          })()}
+                                        </div>
+
+                                        {/* Save */}
+                                        <div className="section-actions">
+                                          <button
+                                            className="toggle-btn"
+                                            disabled={!onMoveSection || movingId === s.id}
+                                            onClick={async (ev) => {
+                                              ev.stopPropagation();
+                                              if (!onMoveSection) return;
+                                              const choice = pendingMove[s.id] || {
+                                                day: (s.selectedDays?.[0] as DayKey),
+                                                label: ((s.sessionLabel ?? 'A') as SessionKey),
+                                              };
+                                              setMovingId(s.id);
+                                              try {
+                                                await onMoveSection(s.id, choice.day, choice.label);
+                                                setPendingMove(prev => {
+                                                  const next = { ...prev };
+                                                  delete next[s.id];
+                                                  return next;
+                                                });
+                                              } finally {
+                                                setMovingId(null);
+                                              }
+                                            }}
+                                            title="Move student to the selected day/section"
+                                          >
+                                            {movingId === s.id ? 'Moving…' : 'Save Change'}
+                                          </button>
+                                        </div>
+                                      </div>
+                                      {/* /Section editor */}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
                     </React.Fragment>
                   );
                 })}
@@ -572,7 +831,8 @@ const sectionsFor = (loc: LocationKey, day: DayKey) =>
 
           {/* Mobile */}
           <div className="mobile-only" style={{ maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
-            {paginated.map(s => {
+            {/* Flat list on mobile when only one section present */}
+            {!enableGrouping && paginated.map(s => {
               const expanded = expandedRows.has(s.id);
               return (
                 <div key={s.id} className={`mobile-card ${expanded ? 'expanded' : ''}`}>
@@ -587,12 +847,13 @@ const sectionsFor = (loc: LocationKey, day: DayKey) =>
                     <span className="arrow">{expanded ? 'v' : '>'}</span>
                   </div>
                   {expanded && (
-                      <div className="mobile-card-body" onClick={(e) => e.stopPropagation()}>
+                    <div className="mobile-card-body" onClick={(e) => e.stopPropagation()}>
                       <p><strong>Age:</strong> {s.age}</p>
                       <p><strong>Parent/Guardian:</strong> {s.parentName}</p>
                       <p><strong>Phone:</strong> {s.phone}</p>
                       <p>
                         <strong>Email:</strong> {s.email}
+                        {/* single-recipient email */}
                         <button
                           className="toggle-btn"
                           style={{ marginLeft: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.85rem' }}
@@ -600,6 +861,7 @@ const sectionsFor = (loc: LocationKey, day: DayKey) =>
                             e.stopPropagation();
                             window.location.href = `mailto:${s.email}`;
                           }}
+                          title="Email this student"
                         >
                           Email
                         </button>
@@ -607,8 +869,8 @@ const sectionsFor = (loc: LocationKey, day: DayKey) =>
                       <p><strong>Location:</strong> {s.location}</p>
                       <p><strong>Frequency:</strong> {s.frequency === 'ONCE_A_WEEK' ? 'Once' : 'Twice'}</p>
                       <p><strong>Day(s):</strong> {s.selectedDays.join(', ')}</p>
-<p><strong>Session:</strong> {s.sessionLabel ?? '—'}</p>
-<p><strong>Start Date:</strong> {formatDatePretty(chooseStartDateIso(s))}</p>
+                      <p><strong>Session:</strong> {s.sessionLabel ?? '—'}</p>
+                      <p><strong>Start Date:</strong> {formatDatePretty(chooseStartDateIso(s))}</p>
                       <p style={{ color: calculateOwed(s) === 0 ? 'green' : 'red' }}>
                         <strong>Owes:</strong> ${calculateOwed(s)}
                       </p>
@@ -640,122 +902,347 @@ const sectionsFor = (loc: LocationKey, day: DayKey) =>
                         </select>
 
                         <button
-  className="toggle-btn"
-  onClick={async (e) => {
-    e.stopPropagation();
-    const newStatus = pendingStatus[s.id] ?? s.paymentStatus;
-    setSavingId(s.id);
-    try {
-      await onStatusUpdate(s.id, newStatus);
-      setPendingStatus(p => {
-  const next = { ...p };
-  delete next[s.id];
-  return next;
-});
-    } finally {
-      setSavingId(null);
-    }
-  }}
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  disabled={savingId === s.id}
->
+                          className="toggle-btn"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const newStatus = pendingStatus[s.id] ?? s.paymentStatus;
+                            setSavingId(s.id);
+                            try {
+                              await onStatusUpdate(s.id, newStatus);
+                              setPendingStatus(p => {
+                                const next = { ...p };
+                                delete next[s.id];
+                                return next;
+                              });
+                            } finally {
+                              setSavingId(null);
+                            }
+                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          disabled={savingId === s.id}
+                        >
                           {savingId === s.id ? '...' : 'Save'}
                         </button>
+
                         <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '0.75rem 0' }} />
 
-<div className="section-editor">
-  {/* Day selector */}
-  <div className="section-field">
-    <label className="section-label">Day</label>
-    <select
-      className="section-select"
-      value={(pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey)}
-      onChange={(e) => {
-        const day = e.target.value as DayKey;
-        const label = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
-        setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
-      }}
-    >
-      {dayOptionsFor(s.location as LocationKey).map(d => (
-        <option key={d} value={d}>{d}</option>
-      ))}
-    </select>
-  </div>
+                        {/* Section editor */}
+                        <div className="section-editor">
+                          {/* Day selector */}
+                          <div className="section-field">
+                            <label className="section-label">Day</label>
+                            <select
+                              className="section-select"
+                              value={(pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey)}
+                              onChange={(e) => {
+                                const day = e.target.value as DayKey;
+                                const label = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
+                                setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
+                              }}
+                            >
+                              {dayOptionsFor(s.location as LocationKey).map(d => (
+                                <option key={d} value={d}>{d}</option>
+                              ))}
+                            </select>
+                          </div>
 
-  {/* Section selector (SOLD OUT disables) */}
-  <div className="section-field">
-    <label className="section-label">Section</label>
-    {(() => {
-      const chosenDay = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
-      const opts = sectionsFor(s.location as LocationKey, chosenDay);
-      const currentLabel = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
-      return (
-        <select
-          className="section-select"
-          value={currentLabel}
-          onChange={(e) => {
-            const label = e.target.value as SessionKey;
-            const day = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
-            setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
-          }}
-        >
-          {(['A','B'] as SessionKey[]).map(label => {
-            const meta = opts.find(o => o.label === label);
-            const soldOut = !!meta?.isFull;
-            return (
-              <option key={label} value={label} disabled={soldOut}>
-                {label}{soldOut ? ' — SOLD OUT' : ''}
-              </option>
-            );
-          })}
-        </select>
-      );
-    })()}
-  </div>
+                          {/* Section selector */}
+                          <div className="section-field">
+                            <label className="section-label">Section</label>
+                            {(() => {
+                              const chosenDay = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
+                              const opts = sectionsFor(s.location as LocationKey, chosenDay);
+                              const currentLabel = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
+                              return (
+                                <select
+                                  className="section-select"
+                                  value={currentLabel}
+                                  onChange={(e) => {
+                                    const label = e.target.value as SessionKey;
+                                    const day = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
+                                    setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
+                                  }}
+                                >
+                                  {(['A','B'] as SessionKey[]).map(label => {
+                                    const meta = opts.find(o => o.label === label);
+                                    const soldOut = !!meta?.isFull;
+                                    return (
+                                      <option key={label} value={label} disabled={soldOut}>
+                                        {label}{soldOut ? ' — SOLD OUT' : ''}
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                              );
+                            })()}
+                          </div>
 
-  {/* Save */}
-  <div className="section-actions">
-    <button
-      className="toggle-btn"
-      disabled={!onMoveSection || movingId === s.id}
-      onClick={async (ev) => {
-        ev.stopPropagation();
-        if (!onMoveSection) return;
-        const choice = pendingMove[s.id] || {
-          day: (s.selectedDays?.[0] as DayKey),
-          label: ((s.sessionLabel ?? 'A') as SessionKey),
-        };
-        setMovingId(s.id);
-        try {
-          await onMoveSection(s.id, choice.day, choice.label);
-          setPendingMove(prev => {
-            const next = { ...prev };
-            delete next[s.id];
-            return next;
-          });
-        } finally {
-          setMovingId(null);
-        }
-      }}
-      title="Move student to the selected day/section"
-    >
-      {movingId === s.id ? 'Moving…' : 'Save Change'}
-    </button>
-  </div>
-</div>
-
+                          {/* Save */}
+                          <div className="section-actions">
+                            <button
+                              className="toggle-btn"
+                              disabled={!onMoveSection || movingId === s.id}
+                              onClick={async (ev) => {
+                                ev.stopPropagation();
+                                if (!onMoveSection) return;
+                                const choice = pendingMove[s.id] || {
+                                  day: (s.selectedDays?.[0] as DayKey),
+                                  label: ((s.sessionLabel ?? 'A') as SessionKey),
+                                };
+                                setMovingId(s.id);
+                                try {
+                                  await onMoveSection(s.id, choice.day, choice.label);
+                                  setPendingMove(prev => {
+                                    const next = { ...prev };
+                                    delete next[s.id];
+                                    return next;
+                                  });
+                                } finally {
+                                  setMovingId(null);
+                                }
+                              }}
+                              title="Move student to the selected day/section"
+                            >
+                              {movingId === s.id ? 'Moving…' : 'Save Change'}
+                            </button>
+                          </div>
+                        </div>
+                        {/* /Section editor */}
                       </div>
-
                     </div>
                   )}
                 </div>
               );
             })}
+
+            {/* Grouped mobile list when multiple sections present (with collapsible headers + email group) */}
+            {enableGrouping && groupedBySection.map(group => {
+              const isCollapsed = !!collapsedGroups[group.label];
+              const groupEmails = group.items.map(g => g.email).filter(Boolean);
+              return (
+                <div key={group.label} style={{ marginBottom: '0.5rem' }}>
+                  <div
+                    className="mobile-card"
+                    style={{ background: '#f8fafc', padding: '0.5rem 0.75rem', fontWeight: 700 }}
+                  >
+                    <div
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                    >
+                      <div
+                        onClick={() => toggleGroup(group.label)}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        <span style={{ marginRight: 8 }}>{isCollapsed ? '>' : 'v'}</span>
+                        Section {group.label}
+                        <span className="badge" style={{ marginLeft: 8 }}>{group.items.length}</span>
+                      </div>
+
+                      {/* NEW: Email this group (BCC) */}
+                      <button
+                        className="toggle-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          launchBcc(groupEmails);
+                        }}
+                        disabled={groupEmails.length === 0}
+                        title={`Email Group ${group.label} (BCC)`}
+                      >
+                        Email group
+                      </button>
+                    </div>
+                  </div>
+
+                  {!isCollapsed && group.items.map(s => {
+                    const expanded = expandedRows.has(s.id);
+                    return (
+                      <div key={s.id} className={`mobile-card ${expanded ? 'expanded' : ''}`}>
+                        <div
+                          className="mobile-card-header"
+                          onClick={() => toggleRow(s.id)}
+                          role="button"
+                          aria-expanded={expanded}
+                        >
+                          <span className="student-name">{s.studentName}</span>
+                          <span className={`pill pill--${s.paymentStatus.toLowerCase()}`}>{s.paymentStatus}</span>
+                          <span className="arrow">{expanded ? 'v' : '>'}</span>
+                        </div>
+                        {expanded && (
+                          <div className="mobile-card-body" onClick={(e) => e.stopPropagation()}>
+                            <p><strong>Age:</strong> {s.age}</p>
+                            <p><strong>Parent/Guardian:</strong> {s.parentName}</p>
+                            <p><strong>Phone:</strong> {s.phone}</p>
+                            <p>
+                              <strong>Email:</strong> {s.email}
+                              {/* single-recipient email */}
+                              <button
+                                className="toggle-btn"
+                                style={{ marginLeft: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.85rem' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.location.href = `mailto:${s.email}`;
+                                }}
+                                title="Email this student"
+                              >
+                                Email
+                              </button>
+                            </p>
+                            <p><strong>Location:</strong> {s.location}</p>
+                            <p><strong>Frequency:</strong> {s.frequency === 'ONCE_A_WEEK' ? 'Once' : 'Twice'}</p>
+                            <p><strong>Day(s):</strong> {s.selectedDays.join(', ')}</p>
+                            <p><strong>Session:</strong> {s.sessionLabel ?? '—'}</p>
+                            <p><strong>Start Date:</strong> {formatDatePretty(chooseStartDateIso(s))}</p>
+                            <p style={{ color: calculateOwed(s) === 0 ? 'green' : 'red' }}>
+                              <strong>Owes:</strong> ${calculateOwed(s)}
+                            </p>
+
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                              <select
+                                value={pendingStatus[s.id] ?? s.paymentStatus}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  setPendingStatus(prev => ({ ...prev, [s.id]: e.target.value as Student['paymentStatus'] }));
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onTouchStart={(e) => e.stopPropagation()}
+                                aria-label={`Payment status for ${s.studentName}`}
+                                style={{
+                                  flex: 1,
+                                  padding: '0.6rem',
+                                  borderRadius: 6,
+                                  border: '1px solid #ccc',
+                                  background: '#fff',
+                                  fontSize: '0.9rem',
+                                  appearance: 'none' as const
+                                }}
+                              >
+                                <option value="PENDING">PENDING</option>
+                                <option value="PAID">PAID</option>
+                                <option value="FAILED">FAILED</option>
+                              </select>
+
+                              <button
+                                className="toggle-btn"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const newStatus = pendingStatus[s.id] ?? s.paymentStatus;
+                                  setSavingId(s.id);
+                                  try {
+                                    await onStatusUpdate(s.id, newStatus);
+                                    setPendingStatus(p => {
+                                      const next = { ...p };
+                                      delete next[s.id];
+                                      return next;
+                                    });
+                                  } finally {
+                                    setSavingId(null);
+                                  }
+                                }}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onTouchStart={(e) => e.stopPropagation()}
+                                disabled={savingId === s.id}
+                              >
+                                {savingId === s.id ? '...' : 'Save'}
+                              </button>
+
+                              <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '0.75rem 0' }} />
+
+                              {/* Section editor */}
+                              <div className="section-editor">
+                                {/* Day selector */}
+                                <div className="section-field">
+                                  <label className="section-label">Day</label>
+                                  <select
+                                    className="section-select"
+                                    value={(pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey)}
+                                    onChange={(e) => {
+                                      const day = e.target.value as DayKey;
+                                      const label = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
+                                      setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
+                                    }}
+                                  >
+                                    {dayOptionsFor(s.location as LocationKey).map(d => (
+                                      <option key={d} value={d}>{d}</option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* Section selector */}
+                                <div className="section-field">
+                                  <label className="section-label">Section</label>
+                                  {(() => {
+                                    const chosenDay = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
+                                    const opts = sectionsFor(s.location as LocationKey, chosenDay);
+                                    const currentLabel = (pendingMove[s.id]?.label) || ((s.sessionLabel ?? 'A') as SessionKey);
+                                    return (
+                                      <select
+                                        className="section-select"
+                                        value={currentLabel}
+                                        onChange={(e) => {
+                                          const label = e.target.value as SessionKey;
+                                          const day = (pendingMove[s.id]?.day) || (s.selectedDays?.[0] as DayKey);
+                                          setPendingMove(prev => ({ ...prev, [s.id]: { day, label } }));
+                                        }}
+                                      >
+                                        {(['A','B'] as SessionKey[]).map(label => {
+                                          const meta = opts.find(o => o.label === label);
+                                          const soldOut = !!meta?.isFull;
+                                          return (
+                                            <option key={label} value={label} disabled={soldOut}>
+                                              {label}{soldOut ? ' — SOLD OUT' : ''}
+                                            </option>
+                                          );
+                                        })}
+                                      </select>
+                                    );
+                                  })()}
+                                </div>
+
+                                {/* Save */}
+                                <div className="section-actions">
+                                  <button
+                                    className="toggle-btn"
+                                    disabled={!onMoveSection || movingId === s.id}
+                                    onClick={async (ev) => {
+                                      ev.stopPropagation();
+                                      if (!onMoveSection) return;
+                                      const choice = pendingMove[s.id] || {
+                                        day: (s.selectedDays?.[0] as DayKey),
+                                        label: ((s.sessionLabel ?? 'A') as SessionKey),
+                                      };
+                                      setMovingId(s.id);
+                                      try {
+                                        await onMoveSection(s.id, choice.day, choice.label);
+                                        setPendingMove(prev => {
+                                          const next = { ...prev };
+                                          delete next[s.id];
+                                          return next;
+                                        });
+                                      } finally {
+                                        setMovingId(null);
+                                      }
+                                    }}
+                                    title="Move student to the selected day/section"
+                                  >
+                                    {movingId === s.id ? 'Moving…' : 'Save Change'}
+                                  </button>
+                                </div>
+                              </div>
+                              {/* /Section editor */}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
+          {/* Pagination (only makes sense when not grouped) */}
+          {!enableGrouping && totalPages > 1 && (
             <div className="pagination-controls">
               <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</button>
               <span>Page {page + 1} of {totalPages}</span>
@@ -767,6 +1254,9 @@ const sectionsFor = (loc: LocationKey, day: DayKey) =>
     </section>
   );
 };
+
+
+
 
 const PaymentTable: React.FC<{ students: Student[]; onStatusUpdate: (id: string, newStatus: Student['paymentStatus']) => Promise<void> }> = ({ students, onStatusUpdate }) => {
   const [search, setSearch] = useState('');
@@ -1335,7 +1825,7 @@ const handleMoveSection = async (studentId: string, day: DayKey, label: SessionK
                 {/* Collapsed header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span><strong>{s.studentName}</strong> — {s.parentName}</span>
-                  <span style={{ fontSize: '1.2rem' }}>{expanded ? '▲' : '▼'}</span>
+                  <span style={{ fontSize: '1.2rem' }}>{expanded ? '^' : 'v'}</span>
                 </div>
 
                 {/* Expanded details */}

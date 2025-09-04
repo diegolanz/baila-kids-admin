@@ -765,6 +765,22 @@ select.form-input:focus {
   .section-actions .toggle-btn { width: 100%; }
 }
 
+.group-header td {
+  background: #f8fafc;
+  color: #111827;
+  font-weight: 700;
+}
 
-
-
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  font-size: 0.9rem;
+}
+.chip .badge {
+  background: #fd3682;
+  color: #fff;
+}
