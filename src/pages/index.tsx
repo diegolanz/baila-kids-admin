@@ -641,6 +641,16 @@ const StudentsTable: React.FC<{
                             </span>
                             {/* NEW: Email this group (BCC) */}
                             <button
+  className="toggle-btn"
+  onClick={(e) => {
+    e.stopPropagation(); // don’t toggle collapse
+    exportRosterPDF(`${title} – Section ${group.label}`, group.items as Student[]);
+  }}
+  title={`Download PDF for Section ${group.label}`}
+>
+  PDF
+</button>
+                            <button
                               className="toggle-btn"
                               onClick={(e) => {
                                 e.stopPropagation(); // don't toggle collapse
@@ -1039,6 +1049,16 @@ const StudentsTable: React.FC<{
                       </div>
 
                       {/* NEW: Email this group (BCC) */}
+                      <button
+  className="toggle-btn"
+  onClick={(e) => {
+    e.stopPropagation(); // don’t toggle collapse
+    exportRosterPDF(`${title} – Section ${group.label}`, group.items as Student[]);
+  }}
+  title={`Download PDF for Section ${group.label}`}
+>
+  PDF
+</button>
                       <button
                         className="toggle-btn"
                         onClick={(e) => {
