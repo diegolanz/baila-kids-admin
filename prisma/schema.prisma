@@ -25,6 +25,8 @@ model Student {
   waiverAddress     String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
+  session           Session        @default(FALL_2024)
+  Enrollment        Enrollment[]
 }
 
 model WaitingList {
@@ -38,6 +40,43 @@ model WaitingList {
   requestedDay String
   notes        String?
   createdAt    DateTime       @default(now())
+  session      Session        @default(FALL_2024)
+}
+
+model AppConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime
+}
+
+model ClassSection {
+  id         String         @id
+  location   SchoolLocation
+  day        Day
+  label      String         @default("A")
+  startDate  DateTime?
+  startTime  String?
+  endTime    String?
+  capacity   Int            @default(22)
+  priceCents Int
+  isActive   Boolean        @default(true)
+  session    Session        @default(FALL_2024)
+  Enrollment Enrollment[]
+
+  @@unique([location, day, label, session])
+}
+
+model Enrollment {
+  id           String           @id
+  studentId    String
+  sectionId    String
+  status       EnrollmentStatus @default(ACTIVE)
+  createdAt    DateTime         @default(now())
+  session      Session          @default(FALL_2024)
+  ClassSection ClassSection     @relation(fields: [sectionId], references: [id])
+  Student      Student          @relation(fields: [studentId], references: [id])
+
+  @@unique([studentId, sectionId])
 }
 
 enum SchoolLocation {
@@ -54,4 +93,25 @@ enum PaymentStatus {
   PENDING
   PAID
   FAILED
+}
+
+enum Day {
+  Monday
+  Tuesday
+  Wednesday
+  Thursday
+  Friday
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  WAITLISTED
+  CANCELLED
+}
+
+enum Session {
+  FALL_2024
+  SPRING_2025
+  FALL_2025
+  SPRING_2026
 }

@@ -5,10 +5,13 @@ import prisma from '../../../lib/prisma';
 // ----------------- Local types -----------------
 type LocationKey = 'KATY' | 'SUGARLAND';
 type SessionKey = 'A' | 'B';
-type DayKey = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday';
+type DayKey = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';
 
 type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED';
 type Frequency = 'ONCE_A_WEEK' | 'TWICE_A_WEEK';
+
+
+
 
 interface StudentRow {
   id: string;
@@ -49,9 +52,9 @@ type AdminStudentDTO = {
 };
 
 type JoinedRow = {
-  studentid: string;
+  studentid: string | null;
   day: string | null;
-  label: SessionKey | null;
+  label: 'A' | 'B' | null;
   startdate: Date | null;
 };
 
@@ -82,20 +85,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === 'GET') {
       // 1) Base students
       const students = await prisma.student.findMany({
+        where: {
+          session: 'SPRING_2026',
+        },
         orderBy: { studentName: 'asc' },
       }) as unknown as StudentRow[];
+
 
       // 2) Enrollment -> ClassSection (real column names: sectionId, studentId)
       const joined = await prisma.$queryRaw<JoinedRow[]>`
         SELECT
-          "Enrollment"."studentId"    AS studentid,
-          "ClassSection"."day"        AS day,
-          "ClassSection"."label"      AS label,
-          "ClassSection"."startDate"  AS startdate
+          "Enrollment"."studentId"   AS studentid,
+          "ClassSection"."day"       AS day,
+          "ClassSection"."label"     AS label,
+          "ClassSection"."startDate" AS startdate
         FROM "Enrollment"
         JOIN "ClassSection"
           ON "Enrollment"."sectionId" = "ClassSection"."id"
+        WHERE "ClassSection"."session" = 'SPRING_2026'
       `;
+
+
 
       // 3) Aggregate by student
       const byStudent = new Map<string, Agg>();
@@ -112,9 +122,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (r.day) entry.days.add(r.day.trim());
 
-        if (r.label) {
-          entry.labels[r.label] = (entry.labels[r.label] ?? 0) + 1;
+        if (r.label === 'A' || r.label === 'B') {
+          const label = r.label as SessionKey;
+          entry.labels[label] += 1;
         }
+
+
+
 
         if (r.startdate instanceof Date && !Number.isNaN(r.startdate.getTime())) {
           const t = r.startdate.getTime();

@@ -12,7 +12,7 @@ const CAPS: Record<string, number | undefined> = {
 };
 
 type LocationKey = 'KATY' | 'SUGARLAND';
-type DayKey = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday';
+type DayKey = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';
 type SessionKey = 'A' | 'B';
 
 type SectionRow = {
@@ -47,10 +47,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       WHERE status = 'ACTIVE'
       GROUP BY "sectionId"
     `;
-    const countMap = new Map<string, number>(counts.map(r => [r.sectionId, Number(r.count)]));
+    const countMap = new Map<string, number>(
+      counts.map((r: CountRow) => [r.sectionId, Number(r.count)])
+    );
 
     // 3) Build response with isFull
-    const data = sections.map((s) => {
+    const data = sections.map((s: SectionRow) => {
       const key = `${s.location}|${s.day}|${s.label}`;
       const enrolled = countMap.get(s.id) ?? 0;
       const explicitCap = CAPS[key];
@@ -73,7 +75,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Failed to load sections' });
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }

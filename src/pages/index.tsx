@@ -19,7 +19,7 @@ interface Student {
 
   // NEW FIELDS from API
   sessionLabel?: 'A' | 'B' | null;
-  startDatesByDay?: Partial<Record<'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday', string>>;
+  startDatesByDay?: Partial<Record<'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday', string>>;
 
   paymentStatus: 'PENDING' | 'PAID' | 'FAILED';
   paymentMethod?: string | null;
@@ -80,7 +80,7 @@ interface WaitlistEntry {
 
 type LocationKey = 'KATY' | 'SUGARLAND';
 type SessionKey = 'A' | 'B';
-type DayKey = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday';
+type DayKey = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';
 
 // Section metadata used by the admin day/section editor
 type SectionMeta = {
@@ -100,12 +100,12 @@ type PriceTable = Record<LocationKey, Record<SessionKey, PriceRow>>;
 
 const prices: PriceTable = {
   KATY: {
-    A: { Tuesday: 245, Wednesday: 245, both: 450 },
-    B: { Tuesday: 245, Wednesday: 245, both: 450 },
+    A: { Tuesday: 280, Wednesday: 280, both: 530 },
+    B: { Tuesday: 280, Wednesday: 280, both: 530 },
   },
   SUGARLAND: {
-    A: { Monday: 230, Thursday: 245, both: 450 },
-    B: { Monday: 195, Thursday: 195, both: 380 }, // adjust if your B prices differ
+    A: { Monday: 265, Thursday: 280, Friday: 280, both: 520 },
+    B: { Monday: 265, Thursday: 280, Friday: 280, both: 520 }, // adjust if your B prices differ
   },
 };
 
@@ -330,8 +330,11 @@ const StudentsTable: React.FC<{
   const [movingId, setMovingId] = useState<string | null>(null);
 
   // Allowed days by location, and available sections for (location, day)
-  const dayOptionsFor = (loc: LocationKey): DayKey[] =>
-    loc === 'KATY' ? ['Tuesday', 'Wednesday'] : ['Monday', 'Thursday'];
+const dayOptionsFor = (loc: LocationKey): DayKey[] =>
+  loc === 'KATY'
+    ? ['Tuesday', 'Wednesday', 'Friday']
+    : ['Monday', 'Thursday'];
+
 
   const sectionsFor = (loc: LocationKey, day: DayKey) =>
     (sections || []).filter(s => s.location === loc && s.day === day);
@@ -1932,6 +1935,17 @@ const handleMoveSection = async (studentId: string, day: DayKey, label: SessionK
     onMoveSection={handleMoveSection}
   />
 </div>
+<div className="grid grid--two">
+  <StudentsTable
+    title="Friday"
+    students={dayOnly('Friday')}
+    onStatusUpdate={handleStatusUpdate}
+    sections={sections}
+    onMoveSection={handleMoveSection}
+  />
+</div>
+
+
 
           {/* <PaymentTable students={students} onStatusUpdate={handleStatusUpdate} /> */}
           {/* Earnings Section */}
