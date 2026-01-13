@@ -1,6 +1,8 @@
 // src/pages/api/admin/students.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import prisma from '../../../lib/prisma';
+import { Session } from '@prisma/client';
+
 
 // ----------------- Local types -----------------
 type LocationKey = 'KATY' | 'SUGARLAND';
@@ -79,14 +81,17 @@ function isDayKey(x: string): x is DayKey {
   return x === 'Monday' || x === 'Tuesday' || x === 'Wednesday' || x === 'Thursday';
 }
 
+
 // ----------------- Handler -----------------
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const { session } = req.query;
+
   try {
     if (req.method === 'GET') {
       // 1) Base students
       const students = await prisma.student.findMany({
         where: {
-          session: 'SPRING_2026',
+          session: session as Session,
         },
         orderBy: { studentName: 'asc' },
       }) as unknown as StudentRow[];

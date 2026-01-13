@@ -1607,6 +1607,11 @@ const AdminPage: React.FC = () => {
   const [waitlistLoading, setWaitlistLoading] = useState(true);
   const [waitlistErr, setWaitlistErr] = useState('');
 
+  type SessionValue = 'SPRING_2026' | 'FALL_2025';
+
+  const [session, setSession] = useState<SessionValue>('SPRING_2026');
+
+
 
   const totalRegistrations = React.useMemo(() => {
   return students.reduce((sum, s) => {
@@ -1618,10 +1623,15 @@ const AdminPage: React.FC = () => {
 
 
   useEffect(() => {
+    setLoading(true);
     (async () => {
       try {
-        const res = await axios.get<Student[]>('/api/admin/students');
-        const sorted = [...res.data].sort((a, b) => a.studentName.localeCompare(b.studentName));
+        const res = await axios.get<Student[]>(
+          `/api/admin/students?session=${session}`
+        );
+        const sorted = [...res.data].sort((a, b) =>
+          a.studentName.localeCompare(b.studentName)
+        );
         setStudents(sorted);
       } catch (e) {
         setErr('Failed to load students.');
@@ -1630,21 +1640,26 @@ const AdminPage: React.FC = () => {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [session]);
+
 
   useEffect(() => {
-  (async () => {
-    try {
-      const res = await axios.get<WaitlistEntry[]>('/api/admin/waitlist');
-      setWaitlist(res.data);
-    } catch (e) {
-      console.error(e);
-      setWaitlistErr('Failed to load waitlist.');
-    } finally {
-      setWaitlistLoading(false);
-    }
-  })();
-}, []);
+    setWaitlistLoading(true);
+    (async () => {
+      try {
+        const res = await axios.get<WaitlistEntry[]>(
+          `/api/admin/waitlist?session=${session}`
+        );
+        setWaitlist(res.data);
+      } catch (e) {
+        console.error(e);
+        setWaitlistErr('Failed to load waitlist.');
+      } finally {
+        setWaitlistLoading(false);
+      }
+    })();
+  }, [session]);
+
 
 
 
@@ -1700,13 +1715,16 @@ const [sectionsErr, setSectionsErr] = useState('');
 useEffect(() => {
   (async () => {
     try {
-      const res = await axios.get<SectionMeta[]>('/api/admin/sections');
+      const res = await axios.get<SectionMeta[]>(
+        `/api/admin/sections?session=${session}`
+      );
       setSections(res.data || []);
     } catch (e) {
       console.error('Failed to load sections', e);
     }
   })();
-}, []);
+}, [session]);
+
 
 // Move a student to a chosen day/section; backend should update Enrollment + sync Student.selectedDays/sessionLabel/start date
 const handleMoveSection = async (studentId: string, day: DayKey, label: SessionKey) => {
@@ -1750,6 +1768,26 @@ const handleMoveSection = async (studentId: string, day: DayKey, label: SessionK
       <header className="admin-header">
         <h1>Baila Kids Admin Dashboard</h1>
         <p className="sub" style={{color: 'black'}}>Welcome Cristina! hola mami :)</p>
+        <div style={{ marginTop: '0.75rem' }}>
+          <label style={{ marginRight: '0.5rem', fontWeight: 600 }}>
+            Viewing session:
+          </label>
+
+          <select
+            value={session}
+            onChange={(e) => setSession(e.target.value as SessionValue)}
+            style={{
+              padding: '0.4rem 0.6rem',
+              borderRadius: '6px',
+              border: '1px solid #ccc',
+              background: '#fff'
+            }}
+          >
+            <option value="SPRING_2026">Spring 2026</option>
+            <option value="FALL_2025">Fall 2025</option>
+          </select>
+        </div>
+
       </header>
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', alignItems: 'center', maxWidth: '50%', borderRadius: '5px' }}>
         <input
