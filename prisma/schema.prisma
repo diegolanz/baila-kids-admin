@@ -7,14 +7,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model AppConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 model Student {
   id                String         @id @default(uuid())
   studentName       String
-  age               Int
+  age               Int?
   parentName        String
   phone             String
   email             String
-  location          SchoolLocation
+  city              City
+  classroom         String?
+  school            School
   frequency         ClassFrequency
   selectedDays      String[]
   startDate         DateTime
@@ -25,63 +33,68 @@ model Student {
   waiverAddress     String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
-  session           Session        @default(FALL_2024)
+  session           Session        @default(FALL_2026)
   Enrollment        Enrollment[]
 }
 
 model WaitingList {
-  id           String         @id
+  id           String    @id @default(uuid())
   studentName  String
   age          Int
   parentName   String
   phone        String
+  classroom    String?
   email        String
-  location     SchoolLocation
+  city         City
+  school       School
   requestedDay String
   notes        String?
-  createdAt    DateTime       @default(now())
-  session      Session        @default(FALL_2024)
-}
-
-model AppConfig {
-  key       String   @id
-  value     String
-  updatedAt DateTime
+  createdAt    DateTime  @default(now())
+  session      Session   @default(FALL_2026)
 }
 
 model ClassSection {
-  id         String         @id
-  location   SchoolLocation
-  day        Day
-  label      String         @default("A")
-  startDate  DateTime?
-  startTime  String?
-  endTime    String?
-  capacity   Int            @default(22)
-  priceCents Int
-  isActive   Boolean        @default(true)
-  session    Session        @default(FALL_2024)
-  Enrollment Enrollment[]
+  id          String         @id @default(cuid())
+  city        City
+  school      School
+  day         Day
+  label       String         @default("A")
+  startDate   DateTime?
+  endDate     DateTime?
+  startTime   String?
+  endTime     String?
+  capacity    Int            @default(22)
+  priceCents  Int
+  bundlePriceCents   Int?    
 
-  @@unique([location, day, label, session])
+  isActive    Boolean        @default(true)
+  session     Session        @default(FALL_2026)
+  enrollments Enrollment[]
+
+  eligibleClasses String[]       @default([])
+
+  @@unique([city, school, day, label, session])
 }
 
 model Enrollment {
-  id           String           @id
-  studentId    String
-  sectionId    String
-  status       EnrollmentStatus @default(ACTIVE)
-  createdAt    DateTime         @default(now())
-  session      Session          @default(FALL_2024)
-  ClassSection ClassSection     @relation(fields: [sectionId], references: [id])
-  Student      Student          @relation(fields: [studentId], references: [id])
+  id        String           @id @default(cuid())
+  studentId String
+  sectionId String
+  status    EnrollmentStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  session   Session          @default(FALL_2026)
+  section   ClassSection     @relation(fields: [sectionId], references: [id])
+  student   Student          @relation(fields: [studentId], references: [id])
 
   @@unique([studentId, sectionId])
 }
 
-enum SchoolLocation {
-  KATY
-  SUGARLAND
+enum Session {
+  FALL_2024
+  SPRING_2025
+  FALL_2025
+  SPRING_2026
+  FALL_2026
 }
 
 enum ClassFrequency {
@@ -109,9 +122,17 @@ enum EnrollmentStatus {
   CANCELLED
 }
 
-enum Session {
-  FALL_2024
-  SPRING_2025
-  FALL_2025
-  SPRING_2026
+enum City {
+  HOUSTON
+  DALLAS
+}
+
+enum School {
+  KATY
+  SUGARLAND
+  ALLEN
+  FRISCO
+  CASTLE_HILLS
+  NORTH_DALLAS
+  PRESTON_TRAIL
 }

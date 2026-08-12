@@ -1,31 +1,48 @@
 // src/pages/api/admin/students.ts
+
 import type { NextApiRequest, NextApiResponse } from 'next';
 import prisma from '../../../lib/prisma';
 import { Session } from '@prisma/client';
 
-
 // ----------------- Local types -----------------
-type LocationKey = 'KATY' | 'SUGARLAND';
+
+type CityKey = 'HOUSTON' | 'DALLAS';
+
+type SchoolKey =
+  | 'KATY'
+  | 'SUGARLAND'
+  | 'ALLEN'
+  | 'FRISCO'
+  | 'CASTLE_HILLS'
+  | 'NORTH_DALLAS'
+  | 'PRESTON_TRAIL';
+
 type SessionKey = 'A' | 'B';
-type DayKey = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';
+
+type DayKey =
+  | 'Monday'
+  | 'Tuesday'
+  | 'Wednesday'
+  | 'Thursday'
+  | 'Friday';
 
 type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED';
+
 type Frequency = 'ONCE_A_WEEK' | 'TWICE_A_WEEK';
-
-
-
 
 interface StudentRow {
   id: string;
   studentName: string;
-  age: number;
+  age: number | null;
   parentName: string;
   phone: string;
   email: string;
-  location: LocationKey;
+  city: CityKey;
+  school: SchoolKey;
+  classroom: string | null;
   frequency: Frequency;
-  selectedDays: string[];    // Prisma schema says String[]
-  startDate: Date;           // Prisma returns Date
+  selectedDays: string[];
+  startDate: Date;
   paymentStatus: PaymentStatus;
   paymentMethod: string | null;
   liabilityAccepted: boolean;
@@ -36,18 +53,25 @@ interface StudentRow {
 type AdminStudentDTO = {
   id: string;
   studentName: string;
-  age: number;
+  age: number | null;
   parentName: string;
   phone: string;
   email: string;
-  location: LocationKey;
+
+  city: CityKey;
+  school: SchoolKey;
+  classroom: string | null;
+
   frequency: Frequency;
   selectedDays: string[];
-  startDate: string; // ISO
+
+  startDate: string;
   sessionLabel?: SessionKey | null;
   startDatesByDay?: Partial<Record<DayKey, string>>;
+
   paymentStatus: PaymentStatus;
   paymentMethod?: string | null;
+
   liabilityAccepted?: boolean;
   waiverName?: string | null;
   waiverAddress?: string | null;
@@ -56,15 +80,15 @@ type AdminStudentDTO = {
 type JoinedRow = {
   studentid: string | null;
   day: string | null;
-  label: 'A' | 'B' | null;
+  label: string | null;
   startdate: Date | null;
 };
 
 type Agg = {
   days: Set<string>;
-  starts: number[];                        // epoch ms
-  labels: Record<SessionKey, number>;      // counts for A/B
-  byDay: Map<string, string>;              // day -> earliest ISO
+  starts: number[];
+  labels: Record<SessionKey, number>;
+  byDay: Map<string, string>;
 };
 
 type UpdatePayload = {
@@ -72,164 +96,265 @@ type UpdatePayload = {
   paymentMethod?: string | null;
 };
 
-// For consistent day sorting
+// ----------------- Helpers -----------------
+
 const DAY_ORDER: Record<string, number> = {
-  Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6, Sunday: 7,
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+  Friday: 5,
+  Saturday: 6,
+  Sunday: 7,
 };
 
 function isDayKey(x: string): x is DayKey {
-  return x === 'Monday' || x === 'Tuesday' || x === 'Wednesday' || x === 'Thursday';
+  return (
+    x === 'Monday' ||
+    x === 'Tuesday' ||
+    x === 'Wednesday' ||
+    x === 'Thursday' ||
+    x === 'Friday'
+  );
 }
 
-
 // ----------------- Handler -----------------
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
   const { session } = req.query;
 
+  if (typeof session !== 'string') {
+    return res.status(400).json({
+      error: 'Missing or invalid session',
+    });
+  }
+
   try {
+    // =====================================================
+    // GET
+    // =====================================================
+
     if (req.method === 'GET') {
-      // 1) Base students
-      const students = await prisma.student.findMany({
+      // 1) Load students for the selected session
+      const students = (await prisma.student.findMany({
         where: {
           session: session as Session,
         },
-        orderBy: { studentName: 'asc' },
-      }) as unknown as StudentRow[];
+        orderBy: {
+          studentName: 'asc',
+        },
+      })) as unknown as StudentRow[];
 
-
-      // 2) Enrollment -> ClassSection (real column names: sectionId, studentId)
+      // 2) Load ACTIVE enrollment information
       const joined = await prisma.$queryRaw<JoinedRow[]>`
         SELECT
           "Enrollment"."studentId"   AS studentid,
-          "ClassSection"."day"       AS day,
+          "ClassSection"."day"::text AS day,
           "ClassSection"."label"     AS label,
           "ClassSection"."startDate" AS startdate
         FROM "Enrollment"
         JOIN "ClassSection"
           ON "Enrollment"."sectionId" = "ClassSection"."id"
-        WHERE "ClassSection"."session" = 'SPRING_2026'
+        WHERE "ClassSection"."session" = CAST(${session} AS "public"."Session")
+          AND "Enrollment"."status" = 'ACTIVE'::"public"."EnrollmentStatus"
       `;
 
-
-
-      // 3) Aggregate by student
+      // 3) Aggregate enrollment information by student
       const byStudent = new Map<string, Agg>();
 
-      for (const r of joined) {
-        if (!r.studentid) continue;
+      for (const row of joined) {
+        if (!row.studentid) continue;
 
-        const entry: Agg = byStudent.get(r.studentid) ?? {
+        const entry: Agg = byStudent.get(row.studentid) ?? {
           days: new Set<string>(),
           starts: [],
-          labels: { A: 0, B: 0 },
+          labels: {
+            A: 0,
+            B: 0,
+          },
           byDay: new Map<string, string>(),
         };
 
-        if (r.day) entry.days.add(r.day.trim());
-
-        if (r.label === 'A' || r.label === 'B') {
-          const label = r.label as SessionKey;
-          entry.labels[label] += 1;
+        if (row.day) {
+          entry.days.add(row.day.trim());
         }
 
+        if (row.label === 'A' || row.label === 'B') {
+          entry.labels[row.label] += 1;
+        }
 
+        if (
+          row.startdate instanceof Date &&
+          !Number.isNaN(row.startdate.getTime())
+        ) {
+          const timestamp = row.startdate.getTime();
+          entry.starts.push(timestamp);
 
+          if (row.day) {
+            const day = row.day.trim();
+            const iso = row.startdate.toISOString();
+            const existing = entry.byDay.get(day);
 
-        if (r.startdate instanceof Date && !Number.isNaN(r.startdate.getTime())) {
-          const t = r.startdate.getTime();
-          entry.starts.push(t);
-
-          if (r.day) {
-            const iso = r.startdate.toISOString();
-            const existing = entry.byDay.get(r.day);
-            if (!existing || new Date(iso) < new Date(existing)) {
-              entry.byDay.set(r.day, iso);
+            if (!existing || timestamp < new Date(existing).getTime()) {
+              entry.byDay.set(day, iso);
             }
           }
         }
 
-        byStudent.set(r.studentid, entry);
+        byStudent.set(row.studentid, entry);
       }
 
-      // 4) Compose DTOs
-      const data: AdminStudentDTO[] = students.map((s) => {
-        const agg = byStudent.get(s.id);
+      // 4) Build response used by the admin page
+      const data: AdminStudentDTO[] = students.map((student) => {
+        const agg = byStudent.get(student.id);
 
-        // Selected days: prefer enrollments; fallback to Student.selectedDays
-        // Selected days: prefer enrollments; fallback to Student.selectedDays
-const fromEnrollments = agg ? Array.from(agg.days) : undefined;
-const selectedDays = (fromEnrollments ?? s.selectedDays ?? []).slice().sort(
-  (a, b) => (DAY_ORDER[a] ?? 99) - (DAY_ORDER[b] ?? 99)
-);
+        // Prefer actual enrollment days.
+        // Fall back to Student.selectedDays for older records.
+        const fromEnrollments = agg
+          ? Array.from(agg.days)
+          : undefined;
 
+        const selectedDays = (
+          fromEnrollments ?? student.selectedDays ?? []
+        )
+          .slice()
+          .sort(
+            (a, b) =>
+              (DAY_ORDER[a] ?? 99) -
+              (DAY_ORDER[b] ?? 99)
+          );
 
-        // Session label (most frequent across sections)
+        // Determine A/B group from actual enrolled sections.
         let sessionLabel: SessionKey | null = null;
+
         if (agg) {
-          sessionLabel = agg.labels.A >= agg.labels.B ? (agg.labels.A ? 'A' : null) : 'B';
+          if (agg.labels.A > 0 || agg.labels.B > 0) {
+            sessionLabel =
+              agg.labels.A >= agg.labels.B ? 'A' : 'B';
+          }
         }
 
-        // Earliest start across enrolled sections; fallback to student's startDate
-        const earliestTs = (agg && agg.starts.length > 0)
-          ? Math.min(...agg.starts)
-          : s.startDate.getTime();
+        // Earliest enrolled section start date.
+        // Fall back to Student.startDate.
+        const earliestTs =
+          agg && agg.starts.length > 0
+            ? Math.min(...agg.starts)
+            : student.startDate.getTime();
 
-        // Per-day starts
-        const startDatesByDay: Partial<Record<DayKey, string>> = {};
+        // Start date for each enrolled day.
+        const startDatesByDay: Partial<
+          Record<DayKey, string>
+        > = {};
+
         if (agg) {
-          for (const [d, iso] of agg.byDay.entries()) {
-            if (isDayKey(d)) startDatesByDay[d] = iso;
+          for (const [day, iso] of agg.byDay.entries()) {
+            if (isDayKey(day)) {
+              startDatesByDay[day] = iso;
+            }
           }
         }
 
         const frequency: Frequency =
-          selectedDays.length >= 2 ? 'TWICE_A_WEEK' : 'ONCE_A_WEEK';
+          selectedDays.length >= 2
+            ? 'TWICE_A_WEEK'
+            : 'ONCE_A_WEEK';
 
         return {
-          id: s.id,
-          studentName: s.studentName,
-          age: s.age,
-          parentName: s.parentName,
-          phone: s.phone,
-          email: s.email,
-          location: s.location,
+          id: student.id,
+          studentName: student.studentName,
+          age: student.age,
+
+          parentName: student.parentName,
+          phone: student.phone,
+          email: student.email,
+
+          city: student.city,
+          school: student.school,
+          classroom: student.classroom,
+
           frequency,
           selectedDays,
+
           startDate: new Date(earliestTs).toISOString(),
           sessionLabel,
           startDatesByDay,
-          paymentStatus: s.paymentStatus,
-          paymentMethod: s.paymentMethod,
-          liabilityAccepted: s.liabilityAccepted,
-          waiverName: s.waiverName,
-          waiverAddress: s.waiverAddress,
+
+          paymentStatus: student.paymentStatus,
+          paymentMethod: student.paymentMethod,
+
+          liabilityAccepted: student.liabilityAccepted,
+          waiverName: student.waiverName,
+          waiverAddress: student.waiverAddress,
         };
       });
 
       return res.status(200).json(data);
     }
 
+    // =====================================================
+    // PUT
+    // =====================================================
+
     if (req.method === 'PUT') {
-      // Typed body without `any`
-      const body = req.body as Partial<UpdatePayload> & { id?: string };
+      const body = req.body as Partial<UpdatePayload> & {
+        id?: string;
+      };
+
       const { id } = body;
+
       if (!id) {
-        return res.status(400).json({ error: 'Missing id' });
+        return res.status(400).json({
+          error: 'Missing id',
+        });
       }
 
-      const patch: Record<string, unknown> = {};
-      if (typeof body.paymentStatus === 'string') patch.paymentStatus = body.paymentStatus;
-      if (typeof body.paymentMethod !== 'undefined') patch.paymentMethod = body.paymentMethod;
+      const patch: UpdatePayload = {};
 
-      await prisma.student.update({ where: { id }, data: patch });
-      return res.status(200).json({ ok: true });
+      if (typeof body.paymentStatus === 'string') {
+        patch.paymentStatus = body.paymentStatus;
+      }
+
+      if (typeof body.paymentMethod !== 'undefined') {
+        patch.paymentMethod = body.paymentMethod;
+      }
+
+      await prisma.student.update({
+        where: {
+          id,
+        },
+        data: patch,
+      });
+
+      return res.status(200).json({
+        ok: true,
+      });
     }
 
-    return res.status(405).json({ error: 'Method not allowed' });
+    // =====================================================
+    // Unsupported method
+    // =====================================================
+
+    res.setHeader('Allow', ['GET', 'PUT']);
+
+    return res.status(405).json({
+      error: 'Method not allowed',
+    });
   } catch (err: unknown) {
     const detail =
-      err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown error';
-    console.error(err);
-    return res.status(500).json({ error: 'Server error', detail });
+      err instanceof Error
+        ? err.message
+        : typeof err === 'string'
+          ? err
+          : 'Unknown error';
+
+    console.error('GET/PUT /api/admin/students error:', err);
+
+    return res.status(500).json({
+      error: 'Server error',
+      detail,
+    });
   }
 }
