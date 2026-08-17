@@ -250,12 +250,14 @@ type StudentCardProps = {
   student: Student;
   sections: SectionMeta[];
   onStatusUpdate: (id: string, status: PaymentStatus) => Promise<void>;
+  forceOpen?: boolean;
 };
 
 function StudentCard({
   student,
   sections,
   onStatusUpdate,
+  forceOpen = false,
 }: StudentCardProps) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<PaymentStatus>(student.paymentStatus);
@@ -264,6 +266,10 @@ function StudentCard({
   useEffect(() => {
     setStatus(student.paymentStatus);
   }, [student.paymentStatus]);
+
+  useEffect(() => {
+    if (forceOpen) setOpen(true);
+  }, [forceOpen]);
 
   const tuition = tuitionCentsFor(student, sections);
   const owed = owedCentsFor(student, sections);
@@ -278,7 +284,10 @@ function StudentCard({
   };
 
   return (
-    <article className={`student-row ${open ? 'student-row--open' : ''}`}>
+    <article
+      id={`student-${student.id}`}
+      className={`student-row ${open ? 'student-row--open' : ''}`}
+    >
       <button
         type="button"
         className="student-row__summary"
@@ -380,6 +389,7 @@ type LocationPanelProps = {
   students: Student[];
   sections: SectionMeta[];
   onStatusUpdate: (id: string, status: PaymentStatus) => Promise<void>;
+  selectedStudentId?: string | null;
 };
 
 function LocationPanel({
@@ -387,9 +397,18 @@ function LocationPanel({
   students,
   sections,
   onStatusUpdate,
+  selectedStudentId = null,
 }: LocationPanelProps) {
   const [open, setOpen] = useState(true);
   const [filter, setFilter] = useState('');
+
+  useEffect(() => {
+    if (selectedStudentId && students.some(student => student.id === selectedStudentId)) {
+      setOpen(true);
+      setFilter('');
+    }
+  }, [selectedStudentId, students]);
+
   const locationSections = sections.filter(section => section.school === school);
 
   const sortedStudents = useMemo(() => {
@@ -527,6 +546,7 @@ function LocationPanel({
                 student={student}
                 sections={sections}
                 onStatusUpdate={onStatusUpdate}
+                forceOpen={student.id === selectedStudentId}
               />
             ))}
 
@@ -612,6 +632,21 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [globalSearch, setGlobalSearch] = useState('');
+  const [globalSearchFocused, setGlobalSearchFocused] = useState(false);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+
+  const goToStudent = (student: Student) => {
+    setSelectedStudentId(student.id);
+    setGlobalSearch('');
+    setGlobalSearchFocused(false);
+
+    window.setTimeout(() => {
+      document.getElementById(`student-${student.id}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 100);
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -652,20 +687,28 @@ export default function AdminPage() {
     );
   };
 
-  const filteredStudents = useMemo(() => {
+  const searchResults = useMemo(() => {
     const term = globalSearch.trim().toLowerCase();
-    if (!term) return students;
+    if (!term) return [];
 
-    return students.filter(student =>
-      [
-        student.studentName,
-        student.parentName,
-        student.email,
-        student.phone,
-        student.classroom ?? '',
-        SCHOOL_LABELS[student.school],
-      ].some(value => value.toLowerCase().includes(term)),
-    );
+    return students
+      .filter(student =>
+        [student.studentName, student.parentName].some(value =>
+          value.toLowerCase().includes(term),
+        ),
+      )
+      .sort((a, b) => {
+        const aStudentStarts = a.studentName.toLowerCase().startsWith(term);
+        const bStudentStarts = b.studentName.toLowerCase().startsWith(term);
+        if (aStudentStarts !== bStudentStarts) return aStudentStarts ? -1 : 1;
+
+        const aParentStarts = a.parentName.toLowerCase().startsWith(term);
+        const bParentStarts = b.parentName.toLowerCase().startsWith(term);
+        if (aParentStarts !== bParentStarts) return aParentStarts ? -1 : 1;
+
+        return a.studentName.localeCompare(b.studentName);
+      })
+      .slice(0, 10);
   }, [students, globalSearch]);
 
   const visibleSchools = useMemo(
@@ -673,9 +716,9 @@ export default function AdminPage() {
       SCHOOL_ORDER.filter(
         school =>
           sections.some(section => section.school === school) ||
-          filteredStudents.some(student => student.school === school),
+          students.some(student => student.school === school),
       ),
-    [sections, filteredStudents],
+    [sections, students],
   );
 
   const stats = useMemo(() => {
@@ -756,22 +799,63 @@ export default function AdminPage() {
         </section>
 
         <section className="admin-controls">
-          <div className="search-box">
-            <span aria-hidden="true">⌕</span>
-            <input
-              type="search"
-              placeholder="Search by child, parent, class, or school…"
-              value={globalSearch}
-              onChange={event => setGlobalSearch(event.target.value)}
-            />
-            {globalSearch && (
-              <button
-                type="button"
-                onClick={() => setGlobalSearch('')}
-                aria-label="Clear search"
-              >
-                Clear
-              </button>
+          <div className="search-area">
+            <div className="search-box">
+              <span aria-hidden="true">⌕</span>
+
+              <input
+                type="search"
+                placeholder="Search by child or parent name…"
+                value={globalSearch}
+                onChange={event => setGlobalSearch(event.target.value)}
+                onFocus={() => setGlobalSearchFocused(true)}
+                onBlur={() => {
+                  window.setTimeout(() => setGlobalSearchFocused(false), 150);
+                }}
+                autoComplete="off"
+              />
+
+              {globalSearch && (
+                <button
+                  type="button"
+                  onClick={() => setGlobalSearch('')}
+                  aria-label="Clear search"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {globalSearchFocused && globalSearch.trim() && (
+              <div className="search-results" role="listbox">
+                {searchResults.length ? (
+                  searchResults.map(student => (
+                    <button
+                      key={student.id}
+                      type="button"
+                      className="search-result"
+                      onMouseDown={event => event.preventDefault()}
+                      onClick={() => goToStudent(student)}
+                    >
+                      <span className="search-result__name">
+                        {student.studentName}
+                      </span>
+
+                      <span className="search-result__details">
+                        {SCHOOL_LABELS[student.school]}
+                        {student.classroom
+                          ? ` · ${student.classroom}`
+                          : ''}
+                        {` · Parent: ${student.parentName}`}
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="search-results__empty">
+                    No kids found.
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -795,11 +879,12 @@ export default function AdminPage() {
               <LocationPanel
                 key={school}
                 school={school}
-                students={filteredStudents.filter(
+                students={students.filter(
                   student => student.school === school,
                 )}
                 sections={sections}
                 onStatusUpdate={handleStatusUpdate}
+                selectedStudentId={selectedStudentId}
               />
             ))}
 

@@ -126,11 +126,7 @@ export default async function handler(
 ) {
   const { session } = req.query;
 
-  if (typeof session !== 'string') {
-    return res.status(400).json({
-      error: 'Missing or invalid session',
-    });
-  }
+ 
 
   try {
     // =====================================================
@@ -138,6 +134,12 @@ export default async function handler(
     // =====================================================
 
     if (req.method === 'GET') {
+
+      if (typeof session !== 'string') {
+        return res.status(400).json({
+          error: 'Missing or invalid session',
+        });
+      }
       // 1) Load students for the selected session
       const students = (await prisma.student.findMany({
         where: {
